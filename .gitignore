@@ -1,0 +1,6 @@
+/target/
+/dist/
+/staging/
+/artifacts/
+.DS_Store
+*.pdb

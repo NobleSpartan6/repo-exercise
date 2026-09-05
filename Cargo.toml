@@ -1,0 +1,39 @@
+[package]
+name = "burrow"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "A small, local-first desktop cleaner and disk explorer"
+license = "MIT"
+repository = "https://github.com/NobleSpartan6/repo-exercise"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:eframe", "dep:rfd", "dep:sysinfo"]
+
+[[bin]]
+name = "burrow"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[dependencies]
+dirs = "=6.0.0"
+walkdir = "=2.5.0"
+rayon = "=1.11.0"
+trash = "=5.2.6"
+eframe = { version = "=0.33.0", optional = true, default-features = false, features = ["default_fonts", "glow", "x11", "wayland", "accesskit"] }
+rfd = { version = "=0.15.4", optional = true }
+sysinfo = { version = "=0.36.1", optional = true, default-features = false, features = ["system", "disk"] }
+
+[dev-dependencies]
+tempfile = "=3.22.0"
+filetime = "=0.2.26"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+opt-level = 1

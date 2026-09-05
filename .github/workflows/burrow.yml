@@ -1,0 +1,179 @@
+name: Burrow — build, test and package
+
+on:
+  push:
+    branches: [main, 'burrow/**']
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'packaging/**'
+      - 'examples/**'
+      - 'docs/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - '.github/workflows/burrow.yml'
+      - 'README.md'
+      - 'LICENSE'
+      - 'SECURITY.md'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_preview:
+        description: Publish an unsigned preview after every check passes (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: burrow-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resolve:
+    name: Resolve one shared dependency lock and source bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust compiler
+        run: rustup toolchain install 1.90.0 --profile minimal
+      - name: Resolve dependencies once for all platforms
+        run: |
+          if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
+          cargo metadata --locked --format-version 1 > dependency-metadata.json
+          python3 scripts/package.py notices
+          python3 scripts/package.py source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: locked-inputs
+          path: |
+            Cargo.lock
+            THIRD_PARTY_NOTICES.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-bundle
+          path: dist/*-source.zip
+          if-no-files-found: error
+
+  build:
+    name: Test and build ${{ matrix.label }}
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS-AppleSilicon
+            package: apple-silicon
+          - os: macos-15-intel
+            label: macOS-Intel
+            package: intel
+          - os: windows-2022
+            label: Windows-x64
+            package: windows
+          - os: ubuntu-24.04
+            label: Linux-QA-only
+            package: qa
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: locked-inputs
+          path: .
+      - name: Install pinned compiler and Clippy
+        run: rustup toolchain install 1.90.0 --profile minimal --component clippy
+      - name: Install Linux graphics and smoke-test utilities
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot
+      - name: Run unit tests on this operating system
+        run: cargo test --locked --all-targets
+      - name: Check Rust lints
+        run: cargo clippy --locked --all-targets
+      - name: Build optimized native executable
+        run: cargo build --locked --release
+      - name: Run the native GUI and exercise navigation
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1200x900x24' python3 scripts/smoke_gui.py
+      - name: Measure a synthetic metadata scan
+        if: runner.os == 'Linux'
+        run: cargo run --locked --release --example scan_bench | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Package macOS drag-and-drop installer
+        if: runner.os == 'macOS'
+        run: python3 scripts/package.py macos '${{ matrix.package }}'
+      - name: Package Windows installer and portable ZIP
+        if: runner.os == 'Windows'
+        run: python scripts/package.py windows
+      - uses: actions/upload-artifact@v4
+        if: runner.os != 'Linux'
+        with:
+          name: installer-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Linux'
+        with:
+          name: native-gui-QA
+          path: artifacts/*
+          if-no-files-found: warn
+
+  release:
+    name: Publish an explicitly unsigned preview
+    needs: [resolve, build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.publish_preview == true)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: source-bundle
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: locked-inputs
+          path: dist
+      - name: Publish immutable assets only after all platform jobs pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v0.1.0-preview-${GITHUB_SHA::7}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "This source commit already has a release; not overwriting assets."
+            exit 0
+          fi
+          python3 scripts/package.py checksums
+          cp docs/RELEASE_NOTES.md /tmp/burrow-release.md
+          printf '\nSource commit: `%s`\n' "$GITHUB_SHA" >> /tmp/burrow-release.md
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" \
+            --title "Burrow 0.1.0 preview (${GITHUB_SHA::7})" \
+            --notes-file /tmp/burrow-release.md --prerelease --draft
+          gh release edit "$tag" --draft=false
