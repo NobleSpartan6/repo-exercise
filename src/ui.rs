@@ -195,6 +195,7 @@ impl Burrow {
     fn cleanup(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         subtitle(ui, "Only older files inside a small, known cache allowlist. Your personal folders are not included.");
         ui.add_space(8.0);
+        let previous_days = self.days;
         ui.horizontal_wrapped(|ui| {
             ui.label("Only files older than");
             ui.add_enabled_ui(self.busy.is_none(), |ui| {
@@ -204,6 +205,12 @@ impl Burrow {
             });
             if primary(ui, "Scan caches", self.busy.is_none()).clicked() { self.start(Task::Preview(self.days), ctx); }
         });
+        if self.days != previous_days {
+            self.preview = None;
+            self.selected.clear();
+            self.selected_bytes = 0;
+            self.visible.clear();
+        }
         if let Some(report) = &self.report {
             ui.horizontal_wrapped(|ui| {
                 ui.label(format!("Last cleanup: {} files / {} moved to Trash", report.moved, human_bytes(report.moved_bytes)));

@@ -438,7 +438,15 @@ mod tests {
     #[test]
     fn parent_traversal_is_rejected() {
         let (_dir, root) = fixture();
-        assert!(checked_path(&root.path.join("..")).is_err());
+        // PathBuf::join normalizes '..' away for Windows verbatim paths.
+        // Construct the raw input without normalization so the guard, rather
+        // than the path-builder's behavior, is what this regression tests.
+        let mut raw = root.path.as_os_str().to_os_string();
+        raw.push(std::path::MAIN_SEPARATOR_STR);
+        raw.push("..");
+        let path = Path::new(&raw);
+        assert!(path.components().any(|c| matches!(c, Component::ParentDir)));
+        assert!(checked_path(path).is_err());
     }
     #[cfg(unix)]
     #[test]

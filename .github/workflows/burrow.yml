@@ -103,7 +103,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot
       - name: Run unit tests on this operating system
         run: cargo test --locked --all-targets
       - name: Check Rust lints

@@ -19,7 +19,8 @@ with (artifacts / 'gui.log').open('w') as log:
         window = None
         for _ in range(100):
             if process.poll() is not None:
-                raise RuntimeError('Native app exited before creating a window; see gui.log')
+                details = (artifacts / 'gui.log').read_text(errors='replace')
+                raise RuntimeError(f'Native app exited before creating a window:\n{details}')
             try:
                 window = output('xdotool', 'search', '--onlyvisible', '--name', 'Burrow').splitlines()[0]
                 break
