@@ -1,5 +1,6 @@
 use burrow::{engine::{self, Analysis, Candidate, Cleanup, Control, Preview}, human_bytes, platform};
-use crate::monitor::{Monitor, Snapshot};
+use crate::monitor::{DriveSnapshot, Monitor, Snapshot};
+use burrow::{VERSION, metrics::{DiskCapacity, SpaceLevel, Usage, cpu_fraction}};
 use eframe::egui::{self, Color32, RichText};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -11,6 +12,7 @@ const MUTED: Color32 = Color32::from_rgb(91, 111, 114);
 const GREEN: Color32 = Color32::from_rgb(19, 124, 102);
 const MINT: Color32 = Color32::from_rgb(222, 244, 234);
 const AMBER: Color32 = Color32::from_rgb(143, 85, 14);
+const DANGER: Color32 = Color32::from_rgb(170, 48, 48);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page { Overview, Cleanup, Explorer, About }
@@ -27,6 +29,7 @@ pub struct Burrow {
     page: Page,
     monitor: Option<Monitor>,
     sample: Snapshot,
+    drive_sample: DriveSnapshot,
     tx: Sender<Event>,
     rx: Receiver<Event>,
     control: Control,
@@ -69,7 +72,7 @@ impl Burrow {
             Err(e) => (None, format!("System monitor unavailable: {e}")),
         };
         Self {
-            page: Page::Overview, monitor, sample: Snapshot::default(), tx, rx,
+            page: Page::Overview, monitor, sample: Snapshot::default(), drive_sample: DriveSnapshot::default(), tx, rx,
             control: Control::default(), busy: None, preview: None, analysis: None,
             report: None, selected: HashSet::new(), selected_bytes: 0, visible: Vec::new(),
             filter: String::new(), days: 7, folder: None, message,
@@ -79,6 +82,9 @@ impl Burrow {
 
     fn navigate(&mut self, page: Page, ctx: &egui::Context) {
         self.page = page;
+        if let Some(monitor) = &self.monitor {
+            monitor.set_overview_visible(page == Page::Overview);
+        }
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!("Burrow — {}", page.title())));
     }
 
@@ -97,6 +103,7 @@ impl Burrow {
             self.selected_bytes = 0;
             self.visible.clear();
         }
+        if matches!(&task, Task::Analyze(_)) { self.analysis = None; }
         let control = self.control.clone();
         let tx = self.tx.clone();
         let repaint = ctx.clone();
@@ -119,7 +126,8 @@ impl Burrow {
 
     fn receive(&mut self) {
         if let Some(monitor) = &self.monitor {
-            while let Ok(sample) = monitor.rx.try_recv() { self.sample = sample; }
+            if let Some(sample) = monitor.system.take() { self.sample = sample; }
+            if let Some(sample) = monitor.drives.take() { self.drive_sample = sample; }
         }
         while let Ok(event) = self.rx.try_recv() {
             self.busy = None;
@@ -151,16 +159,38 @@ impl Burrow {
     }
 
     fn overview(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Scroll the whole overview: a long drive list stays reachable on short
+        // windows and at larger display scales. Keep the navigation fixed.
+        egui::ScrollArea::vertical().id_salt("overview")
+            .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .show(ui, |ui| self.overview_contents(ui, ctx));
+    }
+
+    fn overview_contents(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         subtitle(ui, "See what is busy. Find what is taking up space.");
         ui.add_space(20.0);
-        ui.columns(2, |columns| {
-            metric(&mut columns[0], "CPU in use",
-                if self.sample.ready { format!("{:.0}%", self.sample.cpu) } else { "Measuring…".into() },
-                (self.sample.cpu / 100.0).clamp(0.0, 1.0));
-            metric(&mut columns[1], "Memory in use",
-                if self.sample.total_memory > 0 { human_bytes(self.sample.used_memory) } else { "Measuring…".into() },
-                ratio(self.sample.used_memory, self.sample.total_memory));
-        });
+        let cpu = if self.sample.ready { cpu_fraction(self.sample.cpu) } else { None };
+        let memory = Usage::new(self.sample.used_memory, self.sample.total_memory);
+        let cpu_value = cpu.map(|value| format!("{:.0}%", value * 100.0))
+            .unwrap_or_else(|| if self.sample.ready { "Unavailable".into() } else { "Measuring…".into() });
+        let memory_value = memory.map(|_| human_bytes(self.sample.used_memory))
+            .unwrap_or_else(|| if self.sample.ready { "Unavailable".into() } else { "Measuring…".into() });
+        let memory_detail = memory.map(|value| format!("of {} total · {:.1}% used",
+            human_bytes(self.sample.total_memory), value.percent()))
+            .unwrap_or_else(|| "Waiting for an OS memory reading".into());
+        if ui.available_width() >= 600.0 {
+            ui.columns(2, |columns| {
+                metric(&mut columns[0], "CPU in use", cpu_value, cpu.unwrap_or(0.0), "Overall processor usage");
+                metric(&mut columns[1], "Memory in use", memory_value,
+                    memory.map(Usage::fraction).unwrap_or(0.0), &memory_detail);
+            });
+        } else {
+            metric(ui, "CPU in use", cpu_value, cpu.unwrap_or(0.0), "Overall processor usage");
+            ui.add_space(10.0);
+            metric(ui, "Memory in use", memory_value,
+                memory.map(Usage::fraction).unwrap_or(0.0), &memory_detail);
+        }
         ui.add_space(8.0);
         subtitle(ui, "CPU and memory refresh every 2 seconds. No background service when you quit.");
         ui.add_space(20.0);
@@ -168,7 +198,7 @@ impl Burrow {
         ui.add_space(12.0);
         ui.label(RichText::new("Make room, deliberately.").size(23.0).strong());
         subtitle(ui, "Start with a read-only scan. Nothing is selected or removed automatically.");
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if primary(ui, "Review old caches", self.busy.is_none()).clicked() {
                 self.navigate(Page::Cleanup, ctx);
                 self.start(Task::Preview(self.days), ctx);
@@ -177,19 +207,47 @@ impl Burrow {
         });
         ui.add_space(22.0);
         ui.label(RichText::new("Your drives").size(19.0).strong());
-        subtitle(ui, "OS-reported capacity; volumes can share physical storage. Refreshed every 10 seconds.");
-        egui::ScrollArea::vertical().id_salt("drives").show(ui, |ui| {
-            for disk in &self.sample.disks {
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(if disk.name.is_empty() { &disk.mount } else { &disk.name }).strong());
-                    ui.label(RichText::new(&disk.mount).small().color(MUTED));
-                });
-                ui.add(egui::ProgressBar::new(ratio(disk.total.saturating_sub(disk.available), disk.total))
-                    .fill(GREEN).text(format!("{} available of {}", human_bytes(disk.available), human_bytes(disk.total))));
+        subtitle(ui, "Bars show used space. OS-reported volumes can share physical storage.");
+        subtitle(ui, "Refreshed every 10 seconds; virtual and network drives can take longer.");
+        if let Some(sampled_at) = self.drive_sample.sampled_at {
+            let age = sampled_at.elapsed().as_secs();
+            if age >= 30 {
+                ui.colored_label(AMBER, format!("Drive information is {age}s old. A volume may be slow to respond."));
             }
-            if self.sample.disks.is_empty() { subtitle(ui, "Waiting for drive information, or no readable drives are available."); }
-        });
+        }
+        for disk in &self.drive_sample.disks {
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                let name = if disk.name.is_empty() { &disk.mount } else { &disk.name };
+                ui.add(egui::Label::new(RichText::new(name).strong()).truncate()).on_hover_text(name);
+                if !disk.name.is_empty() {
+                    ui.add(egui::Label::new(RichText::new(&disk.mount).small().color(MUTED)).truncate())
+                        .on_hover_text(&disk.mount);
+                }
+            });
+            if let Some(capacity) = DiskCapacity::new(disk.total, disk.available) {
+                let (color, warning) = match capacity.space_level() {
+                    SpaceLevel::Normal => (GREEN, None),
+                    SpaceLevel::Low => (AMBER, Some("Low free space · 10% or less available")),
+                    SpaceLevel::VeryLow => (DANGER, Some("Very low free space · 5% or less available")),
+                };
+                // Labels are outside the bar so neither short nor full bars
+                // cover the numbers, and every bar has the same reference width.
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(format!("{} available of {}", human_bytes(disk.available), human_bytes(disk.total)));
+                    ui.label(RichText::new(format!("{:.1}% used", capacity.used_percent())).small().color(MUTED));
+                });
+                ui.add(egui::ProgressBar::new(capacity.used_fraction()).fill(color)
+                    .desired_width(ui.available_width()).desired_height(7.0));
+                if let Some(warning) = warning { ui.colored_label(color, warning); }
+            } else {
+                subtitle(ui, "Capacity unavailable — this volume has not reported a usable reading.");
+            }
+        }
+        if self.drive_sample.disks.is_empty() {
+            subtitle(ui, if self.drive_sample.ready { "No readable drives were reported by the operating system." }
+                else { "Reading drive information… CPU and memory are measured separately." });
+        }
     }
 
     fn cleanup(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -294,6 +352,7 @@ impl Burrow {
         ui.horizontal(|ui| {
             if ui.add_enabled(self.busy.is_none(), egui::Button::new("Choose folder…")).clicked() {
                 if let Some(folder) = rfd::FileDialog::new().set_title("Choose a folder to inspect").pick_folder() {
+                    if self.folder.as_ref() != Some(&folder) { self.analysis = None; }
                     self.folder = Some(folder);
                 }
             }
@@ -335,7 +394,7 @@ impl Burrow {
     fn about(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.label(RichText::new("Small app. Clear boundaries.").size(25.0));
-            subtitle(ui, "Burrow 0.1.0 · Preview software · Free and open source (MIT)");
+            subtitle(ui, &format!("Burrow {VERSION} · Preview software · Free and open source (MIT)"));
             ui.add_space(16.0);
             ui.label("Built in Rust with a GPU-rendered egui interface. No Electron, browser runtime, account, advertising or telemetry.");
             ui.label("Burrow is an independent Mole-inspired project. It does not include or execute Mole, and is not affiliated with Tw93 or Faberon.");
@@ -352,6 +411,8 @@ impl Burrow {
             ui.label(RichText::new("Keyboard & display").strong());
             ui.label("Ctrl/Command + 1–4: switch pages. Escape: request cancellation. Tab and Space: navigate and activate controls. Ctrl/Command + plus/minus: zoom (egui default).");
             ui.add_space(12.0);
+            ui.hyperlink_to("Download a newer release", "https://github.com/NobleSpartan6/repo-exercise/releases");
+            ui.label("To update: quit Burrow, run the newer Windows installer or replace the Mac app, then reopen it. No uninstaller or terminal is needed.");
             ui.hyperlink_to("Installation and recovery guide", "https://github.com/NobleSpartan6/repo-exercise/blob/main/docs/INSTALL.md");
             ui.hyperlink_to("Source code and issue tracker", "https://github.com/NobleSpartan6/repo-exercise");
             ui.label(RichText::new("Only these explicit links open your browser. Scans and monitoring stay on your computer.").small().color(MUTED));
@@ -428,7 +489,7 @@ impl eframe::App for Burrow {
                     }
                     ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                         ui.label(RichText::new("No subscriptions.\nNo account.").small().color(MINT));
-                        ui.label(RichText::new("0.1.0 · Preview").small().color(Color32::WHITE));
+                        ui.label(RichText::new(format!("{VERSION} · Preview")).small().color(Color32::WHITE));
                     });
                 });
             });
@@ -471,8 +532,10 @@ fn ratio(value: u64, total: u64) -> f32 { if total == 0 { 0.0 } else { (value as
 fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> egui::Response {
     ui.add_enabled(enabled, egui::Button::new(RichText::new(text).color(Color32::WHITE)).fill(GREEN))
 }
-fn metric(ui: &mut egui::Ui, title: &str, value: String, percent: f32) {
+fn metric(ui: &mut egui::Ui, title: &str, value: String, percent: f32, detail: &str) {
     subtitle(ui, title);
     ui.label(RichText::new(value).size(38.0).strong());
-    ui.add(egui::ProgressBar::new(percent).fill(GREEN).desired_height(7.0));
+    ui.label(RichText::new(detail).small().color(MUTED));
+    ui.add(egui::ProgressBar::new(percent).fill(GREEN)
+        .desired_width(ui.available_width()).desired_height(7.0));
 }

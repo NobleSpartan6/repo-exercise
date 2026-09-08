@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Linux/Xvfb native-window smoke test. Never selects or removes real files."""
+"""Linux/Xvfb native-window smoke test. Never selects or removes real files.
+
+Navigation/resize checks are not a visual sign-off; inspect the resulting PNGs.
+"""
 from pathlib import Path
 import subprocess
 import time
@@ -29,19 +32,26 @@ with (artifacts / 'gui.log').open('w') as log:
         if not window:
             raise RuntimeError('No visible native window was created')
         subprocess.check_call(['xdotool', 'windowfocus', '--sync', window])
-        for key, title, filename in [('1', 'Overview', '01-overview.png'), ('2', 'Clean up', '02-cleanup.png'),
-                                     ('3', 'Disk explorer', '03-explorer.png'), ('4', 'About & help', '04-help.png')]:
-            subprocess.check_call(['xdotool', 'key', '--clearmodifiers', f'ctrl+{key}'])
-            for _ in range(50):
-                if title in output('xdotool', 'getwindowname', window):
-                    break
-                time.sleep(0.1)
-            else:
-                raise AssertionError(f'Navigation did not activate {title}')
+        for width, height, size in [('1060', '760', 'desktop'), ('860', '620', 'compact')]:
+            subprocess.check_call(['xdotool', 'windowsize', '--sync', window, width, height])
             time.sleep(0.5)
-            subprocess.check_call(['scrot', '-u', str(artifacts / filename)])
-        assert process.poll() is None, 'App crashed during navigation'
-        (artifacts / 'SMOKE-TEST.txt').write_text('PASS: native window opened; all four navigation shortcuts changed the active page; no cleanup performed.\n')
+            for key, title, name in [('1', 'Overview', '01-overview'), ('2', 'Clean up', '02-cleanup'),
+                                     ('3', 'Disk explorer', '03-explorer'), ('4', 'About & help', '04-help')]:
+                subprocess.check_call(['xdotool', 'key', '--clearmodifiers', f'ctrl+{key}'])
+                for _ in range(50):
+                    if title in output('xdotool', 'getwindowname', window):
+                        break
+                    time.sleep(0.1)
+                else:
+                    raise AssertionError(f'Navigation did not activate {title} at {size} size')
+                time.sleep(0.5)
+                subprocess.check_call(['scrot', '-u', str(artifacts / f'{name}-{size}.png')])
+                assert process.poll() is None, f'App crashed on {title} at {size} size'
+        (artifacts / 'SMOKE-TEST.txt').write_text(
+            'PASS: native window opened; all four page shortcuts changed the active title '
+            'at 1060x760 and 860x620; app remained running; no cleanup performed.\n'
+            'Manual image review, high-DPI checks, real Mac/Windows testing, '
+            'and native Trash restoration remain separate checks.\n')
     finally:
         process.terminate()
         try:

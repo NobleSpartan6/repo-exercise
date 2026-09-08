@@ -2,6 +2,10 @@
 
 pub mod engine;
 pub mod platform;
+pub mod latest;
+pub mod metrics;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn human_bytes(bytes: u64) -> String {
     let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];

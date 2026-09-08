@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #error AppVersion must be supplied by scripts/package.py windows
 #endif
 
 [Setup]
@@ -9,6 +9,7 @@ AppVersion={#AppVersion}
 AppPublisher=Burrow contributors
 AppPublisherURL=https://github.com/NobleSpartan6/repo-exercise
 DefaultDirName={localappdata}\Programs\Burrow
+UsePreviousAppDir=yes
 DefaultGroupName=Burrow
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -24,6 +25,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+CloseApplicationsFilter=burrow.exe
 RestartApplications=no
 
 [Tasks]
