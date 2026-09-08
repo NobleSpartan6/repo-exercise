@@ -1,0 +1,15 @@
+name: Inspect native renderer build diagnostic
+on:
+  push:
+    branches: ['release-prep/0.2.0-diagnostics']
+permissions:
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Read only the failed native build tail
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run view 34292356421 --repo NobleSpartan6/burrow --job 102281541609 --log-failed | tail -90
