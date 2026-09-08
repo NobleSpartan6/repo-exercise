@@ -13,7 +13,13 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
-      - name: Prepare lock, format source, and store an unreferenced candidate commit
+      - name: Prepare formatted blobs for review without updating branches or workflows
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/prepare-modern.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('.github/prepare-modern.py').read_text().split("tree=api('git/trees'")[0]
+          code += "\nprint('PREPARED_BASE='+base, flush=True)\nprint('PREPARED_ENTRIES='+json.dumps(entries), flush=True)\n"
+          exec(compile(code, '.github/prepare-modern.py', 'exec'))
+          PY
