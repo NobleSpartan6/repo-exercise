@@ -1,0 +1,42 @@
+name: Prepare compact navigation and accessible labels
+on:
+  push:
+    branches: ['release-prep/0.2.0-navigation']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Export small visual regression corrections
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, json, subprocess
+          p=Path('src/ui.rs');s=p.read_text()
+          assert s.count('(Page::Overview, "Overview")')==1
+          s=s.replace('(Page::Overview, "Overview")','(Page::Overview, "Home")')
+          s=s.replace('ui.spacing_mut().item_spacing.x = 3.0;', 'ui.spacing_mut().item_spacing.x = 3.0;\n                        ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);')
+          s=s.replace('design::record(&response, page.title());','let response = response.on_hover_text(page.title());\n                                design::record(&response, page.title());')
+          marker='.on_hover_text("Select this file");'
+          assert s.count(marker)==1
+          s=s.replace(marker,marker+'''\n                        response.widget_info(|| egui::WidgetInfo::selected(
+                              egui::WidgetType::Checkbox, ui.is_enabled(), checked,
+                              &format!("Select {}", file.path.display())));
+          ''')
+          p.write_text(s)
+          p=Path('src/ui_tests.rs');s=p.read_text();s=s.replace('let r = rect(&ctx, name);','let r = rect(&ctx, name);\n                assert!(r.height() <= 38.0, "Navigation text wraps at {size:?}: {name} {r:?}");');p.write_text(s)
+          subprocess.run(['cargo','fmt','--all'],check=True)
+          entries=[]
+          for name in ['src/ui.rs','src/ui_tests.rs']:
+              result=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':base64.b64encode(Path(name).read_bytes()).decode(),'encoding':'base64'}).encode()))
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':result['sha']})
+          print('NAV_ENTRIES='+json.dumps(entries),flush=True)
+          PY
