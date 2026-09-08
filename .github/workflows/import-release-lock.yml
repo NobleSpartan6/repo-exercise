@@ -1,0 +1,32 @@
+name: Import the verified 0.1.0 release lock for 0.1.1
+on:
+  push:
+    branches: ['release-prep/0.1.1-lock']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Import a hash-verified lock blob without changing any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: NobleSpartan6/repo-exercise
+        run: |
+          set -euo pipefail
+          gh release download v0.1.0-preview-59fafd1 --pattern Cargo.lock --dir "$RUNNER_TEMP/lock"
+          cd "$RUNNER_TEMP/lock"
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          data = Path('Cargo.lock').read_bytes()
+          assert hashlib.sha256(data).hexdigest() == '5b82fc700d7412bcb9b1c1c3573242eee8223f09e0991eec2df4e54fb733014e'
+          assert data.count(b'name = "burrow"\nversion = "0.1.0"') == 1
+          data = data.replace(b'name = "burrow"\nversion = "0.1.0"', b'name = "burrow"\nversion = "0.1.1"', 1)
+          assert hashlib.sha256(data).hexdigest() == '4b75feb7acf4a778df6a286de355279ac3c438885884c65efbda52a187c184fc'
+          result = subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/repo-exercise/git/blobs','--input','-'], input=json.dumps({'content':data.decode(),'encoding':'utf-8'}).encode())
+          blob = json.loads(result)['sha']
+          assert blob == '85c9ccb68e06362cab2ad8a8315a820210a8cf38'
+          print('Verified Cargo.lock blob:', blob)
+          PY
