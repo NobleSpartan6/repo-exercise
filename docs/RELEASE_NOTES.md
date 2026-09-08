@@ -1,23 +1,60 @@
-# Burrow 0.1.0 — unsigned preview
+# Burrow 0.1.1 — unsigned maintenance preview
 
-A free, independent Mole-inspired native desktop app for macOS and Windows. This is an initial preview, not the official Mole GUI and not a full port of Mole's feature set.
+This update keeps the white-and-green native interface and existing safety scope.
+Burrow remains free and MIT-licensed, with no account, subscription, telemetry,
+automatic updater, or background service after quitting.
 
-Implemented: explicit review and selection of older allowlisted cache files; serial OS Trash requests with revalidation and per-file outcomes; a read-only top-200 largest-file explorer; CPU, RAM and drive monitoring; cancellation; a copyable in-memory session log.
+## What changed
 
-## Choose your download
+- **Clearer memory readings:** amount used, OS-reported total, and percentage used.
+- **More readable drive usage:** full-width bars labeled as used space, with
+  available capacity outside the bar. Text warnings appear at 10%/5% free.
+  Invalid or missing capacities are shown as unavailable rather than full.
+- **Better small-window behavior:** all of Overview scrolls, with a visible
+  scrollbar; CPU/memory readings stack when there is insufficient width.
+- **Independent monitoring:** slow volume queries no longer share a worker with
+  CPU/RAM sampling. Each stream keeps only its latest sample; monitoring stops
+  requesting repaints on other pages. Stale drive data is labeled.
+- **Explorer correction:** selecting or scanning a different folder clears old
+  results, rather than leaving the previous folder's results on screen.
+- **Release reliability:** shared version metadata, required dependency lock,
+  packaging regression tests, release-asset preflight and bounded retry for the
+  observed transient macOS disk-image creation error.
 
-Mac M-series: `macOS-AppleSilicon.dmg`. Intel Mac: `macOS-Intel.dmg`. Windows Intel/AMD 64-bit: `Windows-x64-Setup.exe`. A Windows portable ZIP and a locked source ZIP are also attached. **Source code ZIPs are not installers.**
+The cache allowlist and deletion engine are unchanged. No new folders are
+eligible for cleanup. There is still no automatic cleanup or empty-Trash action.
+No faster-scan benchmark or lower memory-use figure is claimed for this update.
 
-Installation and recovery: [docs/INSTALL.md](https://github.com/NobleSpartan6/repo-exercise/blob/main/docs/INSTALL.md).
+## Updating from 0.1.0
 
-## Important limitations
+Copy any session log you need before quitting, wait for work to finish, then
+close Burrow. On Windows, run the newer **Windows-x64-Setup.exe** under the same
+user account and install over the existing copy. On Mac, replace the existing
+app with the appropriate DMG's app. No terminal or uninstall is needed.
+Check **About & help** for **0.1.1** after installation.
 
-Packages have no verified publisher signature. Mac bundles are ad-hoc signed but not Developer ID signed or notarized; Windows packages are unsigned. Read OS warnings, verify the download source and do not disable system protections.
+Choose **macOS-AppleSilicon.dmg** for an Apple M-series chip,
+**macOS-Intel.dmg** for an Intel Mac, or **Windows-x64-Setup.exe** for a Windows
+Intel/AMD 64-bit PC. **Source ZIPs are not installers.** The Windows portable
+build is updated separately by extracting and opening the new portable copy.
 
-Moving to Trash does **not** immediately free disk space. Nothing is preselected; the app never empties Trash. Close relevant applications first. Cancellation does not undo completed moves. Keep backups; Trash recovery depends on OS behavior and policy.
+Read the [installation and recovery guide](https://github.com/NobleSpartan6/repo-exercise/blob/main/docs/INSTALL.md).
 
-Scans are capped and label partial results. Sizes are logical, not uniquely allocated bytes. App uninstall, system optimization, registry editing, Docker purge and startup management are not implemented. Native Windows ARM64/32-bit installers are not provided.
+## Verification and limitations
 
-The release workflow requires all configured build/test jobs to pass. Automated tests and Linux GUI navigation checks are not a substitute for real-device installation, native cleanup/recovery, accessibility and performance validation. The project has not undergone an independent security audit.
+The user confirmed **0.1.0 installed and opened on Windows** and supplied an
+Overview screenshot. That confirms only the reported old-version installation
+and visible screen, not 0.1.1, Mac installation, full feature correctness,
+performance, native Trash requests or restoration.
 
-The locked source archive, exact Cargo.lock, generated third-party notices and SHA-256 checksums accompany this release. Checksums verify artifact bytes, not publisher trust or absence of malware.
+Publication is gated on all Mac/Windows build and test jobs, packaging regression
+checks, and the Linux native-window launch/navigation/resize smoke test. The
+release footer links its source commit and build run. These checks do not certify
+physical-device installation, high-DPI accessibility, native Trash behavior or
+restoration. Keep prerelease status until those separate checks are complete.
+
+Packages remain unsigned on Windows and ad-hoc signed but **not notarized** on
+Mac. Do not disable system protections to install them. Moving to Trash does
+**not** immediately free disk space. Review selections, close relevant apps,
+keep backups and inspect Trash after errors. Cancellation does not undo moves
+already completed. The project has not undergone an independent security audit.

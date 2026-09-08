@@ -4,7 +4,7 @@ Burrow is engineered to keep filesystem work off the GUI thread, not advertised 
 
 ## Architecture and bounds
 
-The native Rust/egui desktop app uses the host graphics stack rather than shipping Chromium. The monitor has a one-sample channel and refreshes CPU/RAM every two seconds, drives every ten. The UI requests extra refreshes approximately every 150 ms only during a job. The OS/graphics driver can still affect idle power and memory.
+The native Rust/egui desktop app uses the host graphics stack rather than shipping Chromium. CPU/RAM and drive capacity have independent workers and one-value mailboxes. New measurements overwrite older unread measurements instead of queuing. CPU/RAM is sampled every two seconds; the drive worker waits ten seconds after each completed poll, so a slow volume does not spawn additional workers or delay CPU/RAM samples. Monitoring requests repaints only while Overview is selected; it continues taking bounded samples on other pages. The UI requests extra refreshes approximately every 150 ms only during a job. The OS/graphics driver can still affect idle power and memory.
 
 Cleanup discovery traverses known roots with four workers maximum, no content reads and no symlink following. Candidate count is capped at 20,000. Cleanup moves are intentionally serial for understandable per-file outcomes; the native Trash service, especially when handling many individual files, may dominate cleanup time. This app does not claim that moving thousands of cache files to Trash is instant.
 
@@ -33,3 +33,18 @@ Record app version, exact source commit and Cargo.lock; CPU, memory and graphics
 Measure cold launch to interactive window, steady-state idle CPU and process memory, scan throughput for both lots of small files and fewer large files, responsiveness while scrolling/cancelling, time spent in native Trash, and the effects of cache rebuilding on the other application. Use Activity Monitor and Instruments on macOS, and Task Manager/Windows Performance Recorder on Windows. Compare release builds, not debug builds.
 
 Publish median and tail values across repeated runs, along with limits and errors. Keep GUI responsiveness, metadata scan speed, Trash speed and subsequent application performance separate. Clearing a cache can temporarily make an app slower, not faster.
+
+## 0.1.1 regression checks
+
+The core Rust tests include unknown/contradictory capacities, near-full drives,
+exact 5%/10% warning boundaries, maximum u64 sizes, non-finite CPU values,
+latest-sample replacement, bounded retention, and independent stream locks.
+They are intended to run with `cargo test --locked --all-targets` in CI.
+These are correctness checks, not measured performance results.
+
+For a real-device check, open Overview while a virtual or mapped drive is slow.
+Verify CPU/RAM readings continue independently. Switch to About and compare idle
+rendering activity, then return to Overview. Also test 1060×760 and 860×620 windows,
+increased UI scale, long drive names, and scrolling to the final drive.
+A user report of the old version launching is not a benchmark or validation of
+these new behaviors.

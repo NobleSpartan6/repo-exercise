@@ -191,7 +191,7 @@ jobs:
           python3 scripts/package.py verify-release
           python3 scripts/package.py checksums
           cp docs/RELEASE_NOTES.md /tmp/burrow-release.md
-          printf '\nSource commit: `%s`\n' "$GITHUB_SHA" >> /tmp/burrow-release.md
+          printf '\nSource commit: `%s`\n\nBuild run: https://github.com/%s/actions/runs/%s\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> /tmp/burrow-release.md
           gh release create "$tag" dist/* --target "$GITHUB_SHA" \
             --title "Burrow ${version} preview (${GITHUB_SHA::7})" \
             --notes-file /tmp/burrow-release.md --prerelease --draft

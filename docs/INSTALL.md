@@ -95,9 +95,58 @@ To recover on Windows, open **Recycle Bin**, find the file, right-click it and c
 
 Leave files in Trash while checking that your apps work normally. Manually emptying Trash later permanently deletes its contents and is your decision. Trash is not a substitute for a backup.
 
-## Update or uninstall
+## Read the Overview
 
-To update, quit Burrow and install a newer release using the same steps. On Mac, replace the existing Burrow app. On Windows, run the newer installer. There is no automatic updater or background service.
+**Memory in use** shows the amount used, the total memory reported by your OS,
+and the percentage used. This is not a diagnosis of memory pressure.
+
+Drive bars represent **used space**. The amount available is printed separately,
+not on top of the bar. A warning says **Low free space** at 10% available or less,
+and **Very low free space** at 5% or less. Those warnings do not trigger cleanup.
+A volume with an unusable capacity reading is labeled **Capacity unavailable**,
+not shown as a full drive. Virtual volumes can report shared storage or quotas.
+
+Scroll inside Overview to reach additional drives. CPU and memory are sampled
+separately from drive information, so a slow drive query does not hold up those
+readings. Older drive information is labeled when it is at least 30 seconds old.
+
+## Update an existing installation — no uninstall needed
+
+Only install a newer version after its installer appears under the GitHub
+release's **Assets**. A source ZIP, draft release, or unfinished build is not
+an installable update.
+
+### Already installed on Windows
+
+1. Open **About & help → Download a newer release**, or return to the GitHub
+   Releases page in your browser. Download the newer **Windows-x64-Setup.exe**.
+2. In Burrow, copy any cleanup session log you need to keep. Wait for active work
+   to finish, then close Burrow normally.
+3. Open the installer under the same Windows user account. Keep the existing
+   install location, select **Install**, and then **Finish**. You do not need to
+   uninstall 0.1.0 first or choose **Run as administrator**.
+4. Open Burrow from Start. **About & help** and the sidebar show the installed
+   version. For this update, look for **0.1.1**.
+
+The installer keeps the same application identity and per-user location as
+0.1.0. In-place upgrade behavior still needs release-specific testing on a real
+Windows computer; do not infer that it was tested from the old installation report.
+
+### Already installed on Mac
+
+Quit Burrow after any active work finishes, download the correct newer DMG,
+and drag Burrow into the same Applications folder. Choose **Replace** when
+Finder asks, then open the new copy. Keep following the security-warning advice
+above. Test the new app before emptying Trash.
+
+For the portable Windows build, extract the newer portable ZIP to a new folder
+and open that copy after closing the old one. A portable copy is not updated by
+the normal installer.
+
+There is no automatic updater, background service, or update check. The release
+link opens only when you click it.
+
+## Uninstall
 
 To uninstall on Mac, quit Burrow and move **Burrow.app** from Applications to Trash. On Windows, use **Settings → Apps → Installed apps → Burrow → Uninstall**. For the Windows portable version, quit the app and delete its extracted folder. Uninstalling Burrow does not restore or empty previously trashed cache files.
 

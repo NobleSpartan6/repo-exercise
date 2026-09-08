@@ -2,26 +2,35 @@
 
 ## Automated preview path
 
-`.github/workflows/burrow.yml` runs on relevant pushes, pull requests and manual dispatch. It resolves one dependency lock, generates third-party notices and a locked source ZIP, then shares that lock with all matrix jobs. Each platform runs unit tests and Clippy and builds the optimized executable. Linux additionally opens the real native GUI under Xvfb and tests all four navigation shortcuts, saves screenshots/logs, and records the synthetic scan benchmark.
+`.github/workflows/burrow.yml` runs on relevant pushes, pull requests and manual dispatch. It requires the committed dependency lock, runs the offline packaging regression tests, generates third-party notices and a locked source ZIP, then shares that lock with all matrix jobs. It fails if the lock is absent rather than silently updating dependencies. The packaging jobs explicitly select Python 3.13 instead of relying on a runner default. Each platform runs unit tests and Clippy and builds the optimized executable. Linux additionally opens the real native GUI under Xvfb and tests all four navigation shortcuts, saves screenshots/logs, and records the synthetic scan benchmark.
 
 Targets are `macos-14` (Apple Silicon), `macos-15-intel` (Intel), and `windows-2022` (Windows x64). Linux is QA only. Hosted labels can change; review the official [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) when maintaining this workflow. A build's runner OS is not a test of every deployment OS version.
 
-Only a successful `main` push, or an explicit manual dispatch on `main` with `publish_preview` selected, may publish a preview. Pull requests do not publish. The release job alone has `contents: write`; checkout credentials are not persisted. It creates a draft release, uploads completed artifacts and checksums, and then publishes it as a prerelease. Existing releases for the same commit are not overwritten.
+Only a successful `main` push, or an explicit manual dispatch on `main` with `publish_preview` selected, may publish a preview. Pull requests do not publish. The release job alone has `contents: write`; checkout credentials are not persisted. It creates a draft release, uploads completed artifacts and checksums, and then publishes it as a prerelease. Published releases for the same commit are not overwritten. An unfinished draft causes an explicit failure rather than a silent success; inspect the draft before retrying. The obsolete one-time staged-tree publisher has been removed.
 
-The tag includes the source commit's short SHA. The version in `Cargo.toml`, the Inno Setup default, app help text, README examples, and workflow release prefix must be updated together for a version change.
+The tag is `v<package version>-preview-<short SHA>`. `Cargo.toml` is the version source for app chrome/help, release tags/titles and package names. Inno Setup requires the version supplied by `scripts/package.py windows`; it has no stale hardcoded fallback. Update Burrow's version in `Cargo.lock` with its manifest and revise the human-facing changelog/examples. The packaging tests check consistency.
 
 ## Expected artifacts
 
-- `Burrow-0.1.0-macOS-AppleSilicon.dmg`
-- `Burrow-0.1.0-macOS-Intel.dmg`
-- `Burrow-0.1.0-Windows-x64-Setup.exe`
-- `Burrow-0.1.0-Windows-x64-portable.zip`
-- `Burrow-0.1.0-source.zip` containing the exact release `Cargo.lock`
+- `Burrow-0.1.1-macOS-AppleSilicon.dmg`
+- `Burrow-0.1.1-macOS-Intel.dmg`
+- `Burrow-0.1.1-Windows-x64-Setup.exe`
+- `Burrow-0.1.1-Windows-x64-portable.zip`
+- `Burrow-0.1.1-source.zip` containing the exact release `Cargo.lock`
 - `Cargo.lock`, `THIRD_PARTY_NOTICES.txt`, `SHA256SUMS.txt`
 
 The `native-gui-QA` Actions artifact contains actual native-window screenshots and a smoke-test log. Screenshots are QA evidence, not a static UI implementation. Inspect them before release promotion. CI records build/test results; installers still need real-device install and recovery testing.
 
-The first source commit need not contain the generated lockfile because the development environment may be unable to resolve it. Every published release must include its resolved lock and locked source bundle, and all targets in a run consume that same lock. Commit a reviewed `Cargo.lock` for future development and update it deliberately. Do not present builds from separately resolved locks as byte-reproducible.
+The 0.1.1 source includes the exact transitive lock from the 0.1.0 source bundle.
+Only Burrow's own version changes. Keep `Cargo.lock` tracked in the repository.
+The release preflight rejects missing, empty, mixed-version or unexpected assets,
+and checks that the release lock agrees with the manifest. It does not replace
+native build, installer, signature, or device validation.
+
+An observed intermittent `hdiutil: create failed - Resource busy` error now gets
+up to four attempts with 2/4/8-second waits. Other errors fail immediately;
+each create call has a 180-second timeout. Signature and image verification
+remain mandatory. The retry never detaches mounted drives or bypasses signing.
 
 ## Manual packaging
 
