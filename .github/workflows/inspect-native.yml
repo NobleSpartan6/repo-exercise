@@ -9,8 +9,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
-      - name: Read the completed Windows job directly
+      - name: Read completed compiler diagnostics as plain text
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh api repos/NobleSpartan6/burrow/actions/jobs/102281541609/logs | tail -100
+        run: |
+          gh api --allow-escape-sequences repos/NobleSpartan6/burrow/actions/jobs/102281541609/logs > job.log
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          lines = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', Path('job.log').read_text(encoding='utf-8-sig')).splitlines()
+          print('\n'.join(lines[-100:]))
+          PY
