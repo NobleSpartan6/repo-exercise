@@ -1,0 +1,47 @@
+name: Lock native Metal and DirectX renderers
+on:
+  push:
+    branches: ['release-prep/0.2.0-renderer']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Resolve native backend additions without changing existing locked versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, json, subprocess, tomllib
+          before=tomllib.loads(Path('Cargo.lock').read_text())
+          subprocess.run(['cargo','update','--workspace'],check=True)
+          after=tomllib.loads(Path('Cargo.lock').read_text())
+          a={(p['name'],p['version'],p.get('checksum')) for p in before['package'] if p['name']!='burrow'}
+          b={(p['name'],p['version'],p.get('checksum')) for p in after['package'] if p['name']!='burrow'}
+          assert not a-b, f'Unexpected existing dependency removals/updates: {a-b}'
+          print('Native backend additions:', sorted(b-a))
+          p=Path('src/ui.rs');s=p.read_text();a=s.index('    fn overview(');b=s.index('    fn age_control(',a);part=s[a:b]
+          part=part.replace('ui.add_space(12.0);','ui.add_space(4.0);',1).replace('design::orbit(ui, 70.0);','design::orbit(ui, 52.0);').replace('"Room to breathe.", 36.0','"Room to breathe.", 34.0').replace('ui.add_space(26.0);','ui.add_space(18.0);',1)
+          part=part.replace('design::card().inner_margin(16).show(ui, |ui| {','design::card().inner_margin(12).show(ui, |ui| {\n                    ui.spacing_mut().interact_size.y = 20.0;')
+          p.write_text(s[:a]+part+s[b:])
+          p=Path('src/design.rs');s=p.read_text();a=s.index('pub fn metric(');s=s[:a]+s[a:].replace('card().show(ui, |ui| {','card().inner_margin(16).show(ui, |ui| {',1);p.write_text(s)
+          p=Path('scripts/smoke_gui.py');s=p.read_text().replace('                time.sleep(0.5)\n                subprocess.check_call', '                time.sleep(2.3 if title == "Overview" else 0.5)\n                subprocess.check_call');p.write_text(s)
+          for name in ['README.md','docs/RELEASE_NOTES.md','docs/PERFORMANCE.md','docs/INSTALL.md']:
+              p=Path(name);s=p.read_text().replace('The app uses OpenGL.','Mac uses Metal and Windows uses DirectX 12 through native wgpu.');s+='\nNative rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. The pinned eframe diagnostic environment variable `EFRAME_SCREENSHOT_TO` captures the native window and exits when explicitly set by a maintainer; normal launches do not capture or save screenshots.\n';p.write_text(s)
+          subprocess.run(['cargo','fmt','--all'],check=True)
+          subprocess.run(['python3','-m','unittest','discover','-s','scripts','-p','test_*.py'],check=True)
+          entries=[]
+          for name in subprocess.check_output(['git','diff','--name-only','-z']).decode().split('\0'):
+              if not name: continue
+              result=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':base64.b64encode(Path(name).read_bytes()).decode(),'encoding':'base64'}).encode()))
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':result['sha']})
+          print('RENDERER_BASE='+subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),flush=True)
+          print('RENDERER_ENTRIES='+json.dumps(entries),flush=True)
+          PY

@@ -652,7 +652,7 @@ impl Burrow {
                                     .color(MUTED),
                             ),
                         );
-                        let width = (ui.available_width() - 190.0).max(40.0);
+                        let width = (ui.available_width() - 210.0).max(40.0);
                         ui.allocate_ui(egui::vec2(width, 48.0), |ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
                             ui.add(

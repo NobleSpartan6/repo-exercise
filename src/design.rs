@@ -53,7 +53,8 @@ pub fn configure(ctx: &egui::Context) {
     ] {
         let mut names = fallback.clone();
         for path in paths {
-            if let Ok(data) = std::fs::read(path)
+            if std::fs::metadata(path).is_ok_and(|m| m.len() <= 16 * 1024 * 1024)
+                && let Ok(data) = std::fs::read(path)
                 && data.len() <= 16 * 1024 * 1024
                 && ab_glyph::FontArc::try_from_vec(data.clone()).is_ok()
             {
@@ -143,8 +144,21 @@ pub fn button(ui: &mut egui::Ui, text: &str, enabled: bool, primary: bool) -> eg
     response
 }
 
-// Test instrumentation is not compiled into installers.
+// Native focus/hover feedback; only test instrumentation is omitted from installers.
 pub fn record(response: &egui::Response, _name: &str) {
+    if response.has_focus() || response.hovered() {
+        response
+            .ctx
+            .layer_painter(response.layer_id)
+            .with_clip_rect(response.interact_rect.expand(3.0))
+            .rect_stroke(
+                response.rect.expand(1.0),
+                12,
+                Stroke::new(1.0, ACCENT),
+                egui::StrokeKind::Outside,
+            );
+    }
+
     #[cfg(test)]
     response
         .ctx
@@ -202,4 +216,36 @@ pub fn metric(ui: &mut egui::Ui, label: &str, value: &str, detail: &str, fractio
         ui.add_space(7.0);
         bar(ui, fraction.unwrap_or(0.0), ACCENT);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn luminance(c: Color32) -> f64 {
+        let channel = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+    }
+    #[test]
+    fn text_and_action_colors_have_readable_contrast() {
+        for (fg, bg) in [
+            (TEXT, BG),
+            (MUTED, BG),
+            (TEXT, PANEL),
+            (MUTED, PANEL),
+            (ACCENT_INK, ACCENT),
+            (AMBER, PANEL),
+            (DANGER, PANEL),
+        ] {
+            let a = luminance(fg);
+            let b = luminance(bg);
+            assert!((a.max(b) + 0.05) / (a.min(b) + 0.05) >= 4.5);
+        }
+    }
 }
