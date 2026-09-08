@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
-      - name: Read only the failed native build tail
+      - name: Read the completed Windows job directly
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run view 34292356421 --repo NobleSpartan6/burrow --job 102281541609 --log-failed | tail -90
+        shell: bash
+        run: gh api repos/NobleSpartan6/burrow/actions/jobs/102281541609/logs | tail -100
