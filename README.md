@@ -85,3 +85,5 @@ engine without the desktop stack. Native packaging requires Python 3.11+;
 Windows packaging additionally needs Inno Setup 6.
 
 MIT licensed. Independent project; not affiliated with Mole, Tw93, or Faberon.
+
+Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. The pinned eframe diagnostic environment variable `EFRAME_SCREENSHOT_TO` captures the native window and exits when explicitly set by a maintainer; normal launches do not capture or save screenshots.

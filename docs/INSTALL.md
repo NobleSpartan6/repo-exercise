@@ -159,3 +159,5 @@ To uninstall on Mac, quit Burrow and move **Burrow.app** from Applications to Tr
 **Blank window or graphics error:** the app uses OpenGL. Remote desktop sessions, outdated graphics drivers, or restricted virtual machines may not expose a compatible graphics context. Report the OS version and the exact error; do not download drivers from an unknown website.
 
 **Need help:** open https://github.com/NobleSpartan6/burrow/issues and include the app version, Mac/Windows version, and steps that reproduce the issue. Remove private usernames, folder paths and filenames from screenshots or copied logs before posting them publicly.
+
+Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. The pinned eframe diagnostic environment variable `EFRAME_SCREENSHOT_TO` captures the native window and exits when explicitly set by a maintainer; normal launches do not capture or save screenshots.

@@ -58,3 +58,5 @@ Keep backups. Moving files to Trash does not immediately free disk space. Burrow
 never empties Trash. Inspect it after errors; cancellation does not undo completed
 moves. Close apps whose caches you select, as regenerating caches may require
 connectivity or temporarily slow apps down.
+
+Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. The pinned eframe diagnostic environment variable `EFRAME_SCREENSHOT_TO` captures the native window and exits when explicitly set by a maintainer; normal launches do not capture or save screenshots.

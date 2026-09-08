@@ -54,7 +54,7 @@ fn key(app: &mut Burrow, ctx: &egui::Context, key: egui::Key, modifiers: Modifie
     );
 }
 fn fixture(app: &mut Burrow) -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
     for (name, bytes) in [("one.cache", 19), ("two.cache", 27)] {
         let path = dir.path().join(name);
         std::fs::write(&path, vec![7; bytes]).unwrap();

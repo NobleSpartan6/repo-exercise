@@ -36,7 +36,7 @@ with (artifacts / 'gui.log').open('w') as log:
                     if title in output('xdotool', 'getwindowname', window): break
                     time.sleep(0.1)
                 else: raise AssertionError(f'Navigation did not activate {title} at {size}')
-                time.sleep(0.5)
+                time.sleep(2.3 if title == "Overview" else 0.5)
                 subprocess.check_call(['scrot', '-u', str(artifacts / f'{name}-{size}.png')])
                 assert process.poll() is None, f'App crashed on {title}'
         subprocess.check_call(['xdotool', 'windowsize', '--sync', window, '1060', '800'])

@@ -52,3 +52,5 @@ these new behaviors.
 ## 0.2 interface budget
 
 No continuously animated decorations, blur, web view or remote assets. Static orbital geometry. System fonts are validated and loaded once, not distributed. Preview byte totals are cached on receipt. Both file lists are virtualized inside finite-height scroll regions. Scan progress repaints occur at about 7 Hz; CPU/RAM sampling at 0.5 Hz; monitoring does not request repaints on other pages. CI idle measurements are observations on a single machine, not Mac/Windows hardware guarantees.
+
+Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. The pinned eframe diagnostic environment variable `EFRAME_SCREENSHOT_TO` captures the native window and exits when explicitly set by a maintainer; normal launches do not capture or save screenshots.

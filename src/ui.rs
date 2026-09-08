@@ -237,8 +237,8 @@ impl Burrow {
     fn overview(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         egui::ScrollArea::vertical().id_salt("overview").auto_shrink([false, false]).show(ui, |ui| {
             ui.vertical_centered(|ui| {
-                ui.add_space(12.0); design::orbit(ui, 70.0); ui.add_space(8.0);
-                design::title(ui, "Room to breathe.", 36.0);
+                ui.add_space(4.0); design::orbit(ui, 52.0); ui.add_space(8.0);
+                design::title(ui, "Room to breathe.", 34.0);
                 design::muted(ui, "Less clutter. A clearer view of your computer.");
                 ui.add_space(9.0);
                 centered_actions(ui, 334.0, |ui| {
@@ -248,7 +248,7 @@ impl Burrow {
                 ui.add_space(6.0);
                 ui.label(RichText::new("Nothing is selected or removed automatically.").size(12.0).color(MUTED));
             });
-            ui.add_space(26.0);
+            ui.add_space(18.0);
             let cpu = self.sample.ready.then(|| cpu_fraction(self.sample.cpu)).flatten();
             let memory = Usage::new(self.sample.used_memory, self.sample.total_memory);
             let cpu_value = cpu.map(|n| format!("{:.0}%", n * 100.0)).unwrap_or_else(|| "—".into());
@@ -270,7 +270,8 @@ impl Burrow {
             });
             ui.add_space(4.0);
             for disk in &self.drive_sample.disks {
-                design::card().inner_margin(16).show(ui, |ui| {
+                design::card().inner_margin(12).show(ui, |ui| {
+                    ui.spacing_mut().interact_size.y = 20.0;
                     ui.set_min_width((ui.available_width() - 1.0).max(0.0));
                     ui.horizontal(|ui| {
                         let name = if disk.name.is_empty() { &disk.mount } else { &disk.name };
@@ -652,7 +653,7 @@ impl Burrow {
                                     .color(MUTED),
                             ),
                         );
-                        let width = (ui.available_width() - 190.0).max(40.0);
+                        let width = (ui.available_width() - 210.0).max(40.0);
                         ui.allocate_ui(egui::vec2(width, 48.0), |ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
                             ui.add(
