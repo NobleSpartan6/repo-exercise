@@ -1,0 +1,64 @@
+name: Prepare focused native UI corrections
+on:
+  push:
+    branches: ['release-prep/0.2.0-polish']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Export corrected source blobs without updating branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, json, subprocess
+          p=Path('src/ui_tests.rs');s=p.read_text();assert s.count('let dir = tempfile::tempdir().unwrap();')==1
+          p.write_text(s.replace('let dir = tempfile::tempdir().unwrap();','let dir = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();'))
+          p=Path('src/ui.rs');s=p.read_text();assert s.count('ui.available_width() - 190.0')==1
+          p.write_text(s.replace('ui.available_width() - 190.0','ui.available_width() - 210.0'))
+          p=Path('src/design.rs');s=p.read_text()
+          s=s.replace('if let Ok(data) = std::fs::read(path)','if std::fs::metadata(path).is_ok_and(|m| m.len() <= 16 * 1024 * 1024)\n                && let Ok(data) = std::fs::read(path)')
+          s=s.replace('// Test instrumentation is not compiled into installers.','// Native focus/hover feedback; only test instrumentation is omitted from installers.')
+          marker='pub fn record(response: &egui::Response, _name: &str) {'
+          s=s.replace(marker,marker+'''
+              if response.has_focus() || response.hovered() {
+                  response.ctx.layer_painter(response.layer_id)
+                      .with_clip_rect(response.interact_rect.expand(3.0))
+                      .rect_stroke(response.rect.expand(1.0), 12,
+                          Stroke::new(1.0, ACCENT), egui::StrokeKind::Outside);
+              }
+          ''')
+          s += '''
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+              fn luminance(c: Color32) -> f64 {
+                  let channel = |v: u8| { let v = f64::from(v)/255.0; if v <= 0.04045 {v/12.92} else {((v+0.055)/1.055).powf(2.4)} };
+                  0.2126*channel(c.r())+0.7152*channel(c.g())+0.0722*channel(c.b())
+              }
+              #[test]
+              fn text_and_action_colors_have_readable_contrast() {
+                  for (fg,bg) in [(TEXT,BG),(MUTED,BG),(TEXT,PANEL),(MUTED,PANEL),(ACCENT_INK,ACCENT),(AMBER,PANEL),(DANGER,PANEL)] {
+                      let a=luminance(fg);let b=luminance(bg);
+                      assert!((a.max(b)+0.05)/(a.min(b)+0.05) >= 4.5);
+                  }
+              }
+          }
+          '''
+          p.write_text(s)
+          subprocess.run(['cargo','fmt','--all'],check=True)
+          entries=[]
+          for name in ['src/ui.rs','src/ui_tests.rs','src/design.rs']:
+              data=Path(name).read_bytes()
+              result=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':base64.b64encode(data).decode(),'encoding':'base64'}).encode()))
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':result['sha']})
+          print('POLISHED_ENTRIES='+json.dumps(entries),flush=True)
+          PY
