@@ -62,7 +62,9 @@ impl DiskCapacity {
 }
 
 pub fn cpu_fraction(percent: f32) -> Option<f32> {
-    percent.is_finite().then(|| (percent / 100.0).clamp(0.0, 1.0))
+    percent
+        .is_finite()
+        .then(|| (percent / 100.0).clamp(0.0, 1.0))
 }
 
 #[cfg(test)]
@@ -110,22 +112,35 @@ mod tests {
     #[test]
     fn exact_low_space_thresholds_are_inclusive() {
         for (free, expected) in [
-            (11, SpaceLevel::Normal), (10, SpaceLevel::Low),
-            (6, SpaceLevel::Low), (5, SpaceLevel::VeryLow),
+            (11, SpaceLevel::Normal),
+            (10, SpaceLevel::Low),
+            (6, SpaceLevel::Low),
+            (5, SpaceLevel::VeryLow),
         ] {
-            assert_eq!(DiskCapacity::new(100, free).unwrap().space_level(), expected);
+            assert_eq!(
+                DiskCapacity::new(100, free).unwrap().space_level(),
+                expected
+            );
         }
     }
 
     #[test]
     fn tiny_nonempty_drive_is_not_classified_as_full() {
-        assert_eq!(DiskCapacity::new(3, 1).unwrap().space_level(), SpaceLevel::Normal);
+        assert_eq!(
+            DiskCapacity::new(3, 1).unwrap().space_level(),
+            SpaceLevel::Normal
+        );
     }
 
     #[test]
     fn near_full_large_drive_is_very_low() {
         let gib = 1_u64 << 30;
-        assert_eq!(DiskCapacity::new(1_843 * gib, 9 * gib).unwrap().space_level(), SpaceLevel::VeryLow);
+        assert_eq!(
+            DiskCapacity::new(1_843 * gib, 9 * gib)
+                .unwrap()
+                .space_level(),
+            SpaceLevel::VeryLow
+        );
     }
 
     #[test]
@@ -133,7 +148,10 @@ mod tests {
         let disk = DiskCapacity::new(u64::MAX, u64::MAX / 2).unwrap();
         assert!((disk.used_fraction() - 0.5).abs() < 0.000_001);
         assert_eq!(disk.space_level(), SpaceLevel::Normal);
-        assert_eq!(DiskCapacity::new(u64::MAX, 0).unwrap().space_level(), SpaceLevel::VeryLow);
+        assert_eq!(
+            DiskCapacity::new(u64::MAX, 0).unwrap().space_level(),
+            SpaceLevel::VeryLow
+        );
     }
 
     #[test]

@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
 pub mod engine;
-pub mod platform;
 pub mod latest;
 pub mod metrics;
+pub mod platform;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

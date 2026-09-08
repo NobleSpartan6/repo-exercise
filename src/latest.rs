@@ -7,13 +7,17 @@ pub struct Latest<T> {
 
 impl<T> Default for Latest<T> {
     fn default() -> Self {
-        Self { value: Arc::new(Mutex::new(None)) }
+        Self {
+            value: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
 impl<T> Clone for Latest<T> {
     fn clone(&self) -> Self {
-        Self { value: Arc::clone(&self.value) }
+        Self {
+            value: Arc::clone(&self.value),
+        }
     }
 }
 
@@ -21,7 +25,11 @@ impl<T> Latest<T> {
     pub fn publish(&self, value: T) {
         // The lock is never held while taking OS measurements, drawing, or sleeping.
         // Dispose of the replaced value after releasing the lock.
-        let previous = self.value.lock().unwrap_or_else(|e| e.into_inner()).replace(value);
+        let previous = self
+            .value
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace(value);
         drop(previous);
     }
 
@@ -43,7 +51,9 @@ mod tests {
     #[test]
     fn latest_sample_replaces_older_samples() {
         let mailbox = Latest::default();
-        for n in 0..1_000 { mailbox.publish(n); }
+        for n in 0..1_000 {
+            mailbox.publish(n);
+        }
         assert_eq!(mailbox.take(), Some(999));
         assert_eq!(mailbox.take(), None);
     }
@@ -52,7 +62,9 @@ mod tests {
     fn cloned_mailbox_transfers_from_a_worker() {
         let mailbox = Latest::default();
         let writer = mailbox.clone();
-        std::thread::spawn(move || writer.publish(42)).join().unwrap();
+        std::thread::spawn(move || writer.publish(42))
+            .join()
+            .unwrap();
         assert_eq!(mailbox.take(), Some(42));
     }
 

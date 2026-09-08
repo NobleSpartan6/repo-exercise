@@ -111,13 +111,16 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot fonts-dejavu-core
       - name: Test packaging and release metadata
         run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Run unit tests on this operating system
         run: cargo test --locked --all-targets
+      - name: Verify one disposable native Trash round trip
+        if: runner.os != 'Linux'
+        run: cargo test --locked --lib engine::native_tests::native_trash_roundtrip -- --ignored --exact
       - name: Check Rust lints
-        run: cargo clippy --locked --all-targets
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Build optimized native executable
         run: cargo build --locked --release
       - name: Run the native GUI and exercise navigation
@@ -132,6 +135,21 @@ jobs:
       - name: Package Windows installer and portable ZIP
         if: runner.os == 'Windows'
         run: python scripts/package.py windows
+      - name: Fetch verified old Windows installer
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v0.1.1-preview-f30ef4f --pattern '*Setup.exe' --dir "$RUNNER_TEMP/old-burrow"
+      - name: Test Windows installation upgrade launch and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BURROW_OLD_INSTALLER = (Get-ChildItem "$env:RUNNER_TEMP/old-burrow/*Setup.exe").FullName
+          python scripts/verify_install.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test copied Mac application from disk image
+        if: runner.os == 'macOS'
+        run: python3 scripts/verify_install.py '${{ matrix.package }}'
       - uses: actions/upload-artifact@v4
         if: runner.os != 'Linux'
         with:
@@ -139,9 +157,9 @@ jobs:
           path: dist/*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: always() && runner.os == 'Linux'
+        if: always()
         with:
-          name: native-gui-QA
+          name: native-QA-${{ matrix.label }}
           path: artifacts/*
           if-no-files-found: warn
 

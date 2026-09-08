@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+Modern native dark interface, top navigation, system typography, scrollable compact layouts, virtualized rows and cached totals. Expanded native startup, confirmation, packaging, installer and disposable Trash recovery tests. Updated repository links. No broader cleanup permissions, browser runtime, or decorative animation loop.
+
+
 ## 0.1.1 — maintenance preview
 
 Retains the existing visual design and cleanup allowlist. Adds memory totals and

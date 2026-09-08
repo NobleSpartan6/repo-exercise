@@ -48,3 +48,7 @@ rendering activity, then return to Overview. Also test 1060×760 and 860×620 wi
 increased UI scale, long drive names, and scrolling to the final drive.
 A user report of the old version launching is not a benchmark or validation of
 these new behaviors.
+
+## 0.2 interface budget
+
+No continuously animated decorations, blur, web view or remote assets. Static orbital geometry. System fonts are validated and loaded once, not distributed. Preview byte totals are cached on receipt. Both file lists are virtualized inside finite-height scroll regions. Scan progress repaints occur at about 7 Hz; CPU/RAM sampling at 0.5 Hz; monitoring does not request repaints on other pages. CI idle measurements are observations on a single machine, not Mac/Windows hardware guarantees.

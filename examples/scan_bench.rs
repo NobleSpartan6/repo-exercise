@@ -19,7 +19,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(result.files, 10_000);
     assert_eq!(result.top.len(), engine::TOP_FILES);
     assert!(!result.partial);
-    println!("Synthetic scan: 10,000 one-KiB files / 100 folders in {:.3}s ({:.0} files/s). Retained {} largest file records. File creation excluded; warm filesystem metadata; not a Mac/Windows benchmark.",
-        elapsed.as_secs_f64(), result.files as f64 / elapsed.as_secs_f64(), result.top.len());
+    println!(
+        "Synthetic scan: 10,000 one-KiB files / 100 folders in {:.3}s ({:.0} files/s). Retained {} largest file records. File creation excluded; warm filesystem metadata; not a Mac/Windows benchmark.",
+        elapsed.as_secs_f64(),
+        result.files as f64 / elapsed.as_secs_f64(),
+        result.top.len()
+    );
     Ok(())
 }
