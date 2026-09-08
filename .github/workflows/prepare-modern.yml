@@ -1,0 +1,19 @@
+name: Prepare reviewed modern native source
+on:
+  push:
+    branches: ['release-prep/0.2.0-modern']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Prepare lock, format source, and store an unreferenced candidate commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/prepare-modern.py
