@@ -27,4 +27,4 @@ a='''                design::card().inner_margin(14).show(ui,|ui|{
 b='''                design::card().inner_margin(14).show(ui,|ui|{
                     ui.set_min_width(ui.available_width());
                     let mut selected=self.workspace.maintenance_selected.contains(&action);'''
-assert s.count(a)==1;s=s.replace(a,b);p.write_text(s)"}
+assert s.count(a)==1;s=s.replace(a,b);p.write_text(s)
