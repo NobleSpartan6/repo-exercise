@@ -1,0 +1,55 @@
+name: Format reviewed native layout and resilience corrections
+on:
+  push:
+    branches: ['release-prep/0.3.0-verify']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply exact reviewed patch
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,hashlib,subprocess
+          from pathlib import Path
+          patch=gzip.decompress(base64.b64decode(Path('.github/staging/verify030.b64').read_text(),validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='2e88824e8f614c837cf3d7eed15909cc2de202aded2846f8e0b874f6437b628f'
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          PY
+      - name: Install pinned formatter
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Format and test release scripts
+        run: |
+          cargo fmt --all
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+          python3 -m py_compile scripts/smoke_gui.py scripts/verify_install.py
+      - name: Export formatted blobs without updating branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json,subprocess,zipfile
+          from pathlib import Path
+          names=['.github/workflows/burrow.yml','docs/PERFORMANCE.md','docs/RELEASING.md','scripts/smoke_gui.py','scripts/verify_install.py','src/command.rs','src/software.rs','src/ui.rs','src/workspaces.rs']
+          entries=[]
+          for name in names:
+              blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':Path(name).read_text(),'encoding':'utf-8'}).encode()))
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':blob['sha']})
+          Path('verification-entries.json').write_text(json.dumps(entries,indent=2))
+          print('VERIFICATION_ENTRIES='+json.dumps(entries),flush=True)
+          with zipfile.ZipFile('verification-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in names: archive.write(name,name)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-030-source
+          path: |
+            verification-source.zip
+            verification-entries.json
+          if-no-files-found: error
