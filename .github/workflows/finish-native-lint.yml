@@ -1,0 +1,48 @@
+name: Finish reviewed native lint correction
+on:
+  push:
+    branches: ['release-prep/0.2.0-resilience']
+    paths: ['.github/workflows/finish-native-lint.yml']
+permissions:
+  contents: write
+  actions: write
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2d6658dcf7d616b625a203d424068c568951913b
+          persist-credentials: true
+      - name: Apply only the reviewed needless-borrow correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/ui.rs')
+          old = '&format!("Select {}", file.path.display())'
+          data = p.read_text()
+          assert data.count(old) == 1, 'Expected exactly one reviewed lint location'
+          p.write_text(data.replace(old, old[1:], 1))
+          PY
+          rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+          cargo +1.90.0 fmt --all --check
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+          test "$(git diff --name-only)" = 'src/ui.rs'
+          git diff --check
+      - name: Advance the development branch only if its reviewed base is unchanged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected=2d6658dcf7d616b625a203d424068c568951913b
+          actual=$(gh api repos/NobleSpartan6/burrow/git/ref/heads/burrow/0.2.0-modern --jq '.object.sha')
+          test "$actual" = "$expected"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ui.rs
+          git commit -m 'fix: remove needless borrow from accessible file selection labels'
+          git push origin HEAD:refs/heads/burrow/0.2.0-modern
+          printf 'Reviewed candidate commit: '
+          git rev-parse HEAD
+          gh workflow run burrow.yml --repo NobleSpartan6/burrow --ref burrow/0.2.0-modern
