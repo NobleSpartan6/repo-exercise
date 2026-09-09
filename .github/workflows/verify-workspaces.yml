@@ -22,6 +22,7 @@ jobs:
           subprocess.run(['git','apply','--check','-'],input=patch,check=True)
           subprocess.run(['git','apply','-'],input=patch,check=True)
           PY
+          python3 .github/staging/readability.py
       - name: Install pinned formatter
         run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
       - name: Format and test release scripts
@@ -36,7 +37,7 @@ jobs:
           python3 - <<'PY'
           import json,subprocess,zipfile
           from pathlib import Path
-          names=['.github/workflows/burrow.yml','docs/PERFORMANCE.md','docs/RELEASING.md','scripts/smoke_gui.py','scripts/verify_install.py','src/command.rs','src/software.rs','src/ui.rs','src/workspaces.rs']
+          names=['.github/workflows/burrow.yml','docs/PERFORMANCE.md','docs/RELEASING.md','scripts/smoke_gui.py','scripts/verify_install.py','src/command.rs','src/design.rs','src/software.rs','src/ui.rs','src/workspaces.rs']
           entries=[]
           for name in names:
               blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':Path(name).read_text(),'encoding':'utf-8'}).encode()))
