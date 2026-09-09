@@ -45,3 +45,26 @@ jobs:
           name: rustfmt-patch
           path: rustfmt.patch
           if-no-files-found: warn
+  offline-validation-kit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/burrow/0.3.0-workspaces'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt,clippy
+      - name: Package only public compiler and locked dependency sources
+        run: |
+          mkdir -p offline-kit/.cargo
+          cargo vendor --locked offline-kit/vendor > offline-kit/.cargo/config.toml
+          toolchain=$(dirname "$(dirname "$(rustup which --toolchain 1.90.0 rustc)")")
+          mkdir -p offline-kit/toolchain
+          cp -a "$toolchain/bin" "$toolchain/lib" offline-kit/toolchain/
+          tar -czf offline-validation-kit.tar.gz -C offline-kit .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-validation-kit
+          path: offline-validation-kit.tar.gz
+          compression-level: 0
+          retention-days: 1
