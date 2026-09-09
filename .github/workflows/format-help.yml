@@ -1,0 +1,35 @@
+name: Rust formatting help
+
+on:
+  push:
+    branches: ['burrow/**']
+    paths: ['src/**', 'examples/**', '.github/workflows/format-help.yml']
+  pull_request:
+    paths: ['src/**', 'examples/**', '.github/workflows/format-help.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  formatting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install the pinned formatter
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Check formatting without changing the gate
+        run: cargo fmt --all -- --check
+      - name: Prepare a reviewable formatting patch
+        if: failure()
+        run: |
+          cargo fmt --all
+          git diff --binary -- src examples > rustfmt.patch
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: rustfmt-patch
+          path: rustfmt.patch
+          if-no-files-found: warn

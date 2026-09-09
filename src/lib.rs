@@ -3,6 +3,8 @@
 #[cfg(feature = "desktop")]
 pub mod awake;
 pub mod command;
+pub mod cleanup_totals;
+pub mod file_review;
 pub mod engine;
 pub mod latest;
 pub mod maintenance;
