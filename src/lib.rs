@@ -2,10 +2,11 @@
 
 #[cfg(feature = "desktop")]
 pub mod awake;
-pub mod command;
+pub mod cleanup_policy;
 pub mod cleanup_totals;
-pub mod file_review;
+pub mod command;
 pub mod engine;
+pub mod file_review;
 pub mod latest;
 pub mod maintenance;
 pub mod metrics;
@@ -14,6 +15,7 @@ pub mod preferences;
 #[cfg(feature = "desktop")]
 pub mod software;
 pub mod treemap;
+pub mod updates;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

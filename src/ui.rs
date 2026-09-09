@@ -1,3 +1,7 @@
+#[path = "file_actions.rs"]
+mod file_actions;
+#[path = "update_actions.rs"]
+mod update_actions;
 #[path = "workspaces.rs"]
 mod workspaces;
 use crate::design::{self, ACCENT, AMBER, BG, DANGER, LINE, MUTED, PANEL};
@@ -6,7 +10,10 @@ use burrow::{
     VERSION,
     metrics::{DiskCapacity, SpaceLevel, Usage, cpu_fraction},
 };
-use burrow::{command, maintenance, preferences::Preferences, software};
+use burrow::{
+    cleanup_policy, cleanup_totals, command, file_review, maintenance, preferences::Preferences,
+    software, updates,
+};
 use burrow::{
     engine::{self, Analysis, Candidate, Cleanup, Control, Preview},
     human_bytes, platform,
@@ -47,9 +54,13 @@ enum Task {
     Preview(u32),
     Analyze(PathBuf),
     Clean(Vec<Candidate>),
+    ReviewFile { root: PathBuf, path: PathBuf },
+    TrashFile(file_review::FileReview),
     Software,
     Startup,
     Updates,
+    FindUpdates,
+    InstallUpdates(updates::Plan),
     MeasureSoftware(software::Application),
     PlanRemoval(software::Application),
     RemoveSoftware(software::RemovalPlan),
@@ -61,17 +72,21 @@ enum Task {
 enum Event {
     Preview(Preview),
     Analyzed(Analysis),
-    Cleaned(Cleanup),
+    Cleaned(Cleanup, Result<cleanup_totals::Totals, String>),
+    FileReviewed(file_review::FileReview),
     Error(String),
     Software(software::Inventory),
     Startup(Vec<software::StartupItem>),
     UpdateReport(String),
+    UpdatesFound(updates::Catalog),
+    UpdatesInstalled(Vec<updates::Outcome>),
     AppDetails(String),
     AppPlan(software::RemovalPlan),
     AppRemoved(String),
     Maintenance(Vec<maintenance::Record>),
     Notice(String),
     PreferencesSaved,
+    PreferencesUnreadable(String),
 }
 
 pub struct Burrow {
@@ -123,6 +138,12 @@ impl Burrow {
                 }
             }
         }
+        if monitoring && !smoke {
+            match cleanup_totals::load() {
+                Ok(totals) => workspace.cleanup_totals = Some(totals),
+                Err(error) => workspace.totals_error = Some(error),
+            }
+        }
         Self {
             page: Page::Cleanup,
             workspace,
@@ -166,11 +187,23 @@ impl Burrow {
         if self.busy.is_some() {
             return;
         }
-        if matches!(&task, Task::Preview(_) | Task::Clean(_))
-            && self.workspace.preferences_error.is_some()
+        if matches!(
+            &task,
+            Task::Preview(_) | Task::Clean(_) | Task::ReviewFile { .. } | Task::TrashFile(_)
+        ) && self.workspace.preferences_error.is_some()
         {
             self.message =
                 "Cleanup is paused. Review the saved-settings error before scanning.".into();
+            return;
+        }
+        if matches!(
+            &task,
+            Task::Updates | Task::FindUpdates | Task::InstallUpdates(_)
+        ) && !self.workspace.allow_online
+        {
+            self.message =
+                "Allow internet access on the Updates page before checking or installing updates."
+                    .into();
             return;
         }
         self.message.clear();
@@ -179,9 +212,13 @@ impl Burrow {
             Task::Preview(_) => "Scanning known caches",
             Task::Analyze(_) => "Reading folder sizes",
             Task::Clean(_) => "Moving selected files to Trash",
+            Task::ReviewFile { .. } => "Preparing a file removal review",
+            Task::TrashFile(_) => "Moving the reviewed file to Trash",
             Task::Software => "Reading installed apps",
             Task::Startup => "Reading startup registrations",
             Task::Updates => "Checking update sources",
+            Task::FindUpdates => "Reading a structured update catalog",
+            Task::InstallUpdates(_) => "Installing reviewed updates",
             Task::MeasureSoftware(_) => "Measuring app files",
             Task::PlanRemoval(_) => "Preparing an app removal review",
             Task::RemoveSoftware(_) => "Moving an app to Trash",
@@ -203,6 +240,17 @@ impl Burrow {
             self.workspace.app_selected = None;
             self.workspace.app_details.clear();
         }
+        if matches!(&task, Task::FindUpdates | Task::Updates) {
+            self.workspace.update_catalog = None;
+            self.workspace.update_selected.clear();
+            self.workspace.update_plan = None;
+            self.workspace.update_ack = false;
+        }
+        if matches!(&task, Task::InstallUpdates(_)) {
+            self.workspace.update_results.clear();
+            self.workspace.update_catalog = None;
+            self.workspace.update_selected.clear();
+        }
         let preferences = self.workspace.preferences.clone();
         let control = self.control.clone();
         let tx = self.tx.clone();
@@ -220,10 +268,20 @@ impl Burrow {
                     Task::Analyze(path) => engine::analyze(&path, &control)
                         .map(Event::Analyzed)
                         .unwrap_or_else(Event::Error),
-                    Task::Clean(files) => Event::Cleaned(engine::clean_selected(&files, &control)),
+                    Task::Clean(files) => cleanup_policy::clean_selected(&files, &preferences, &control).map(|result| {
+                        let totals = cleanup_totals::record(&result);
+                        Event::Cleaned(result, totals)
+                    }).unwrap_or_else(Event::PreferencesUnreadable),
+                    Task::ReviewFile { root, path } => file_review::review(&root, &path, &preferences, &control).map(Event::FileReviewed).unwrap_or_else(Event::Error),
+                    Task::TrashFile(review) => file_review::move_to_trash(&review, &control).map(|result| {
+                        let totals = cleanup_totals::record(&result);
+                        Event::Cleaned(result, totals)
+                    }).unwrap_or_else(Event::Error),
                     Task::Software => software::inventory(&control).map(Event::Software).unwrap_or_else(Event::Error),
                     Task::Startup => software::startup(&control).map(Event::Startup).unwrap_or_else(Event::Error),
                     Task::Updates => software::check_updates(&control).map(Event::UpdateReport).unwrap_or_else(Event::Error),
+                    Task::FindUpdates => updates::check(&control).map(Event::UpdatesFound).unwrap_or_else(Event::Error),
+                    Task::InstallUpdates(plan) => Event::UpdatesInstalled(updates::install(&plan, &control)),
                     Task::MeasureSoftware(app) => app.path.as_ref().ok_or_else(||"App location unknown".into()).and_then(|p|engine::analyze(p,&control)).map(|r|{
                         let related=software::related_paths(&app).into_iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join("\n");
                         Event::AppDetails(format!("{}: {} across {} readable files. {} {} excluded/unreadable.\n{}",app.name,human_bytes(r.total_bytes),r.files,if r.partial{"Partial scan."}else{""},r.skipped,if related.is_empty(){"No matching related-data paths found.".into()}else{format!("Related paths to inspect (not selected for removal):\n{related}")}))
@@ -293,7 +351,19 @@ impl Burrow {
                     self.refilter();
                 }
                 Event::Analyzed(result) => self.analysis = Some(result),
-                Event::Cleaned(result) => {
+                Event::FileReviewed(review) => {
+                    self.workspace.file_review = Some(review);
+                    self.workspace.file_ack = false;
+                }
+                Event::Cleaned(result, totals) => {
+                    match totals {
+                        Ok(totals) => {
+                            self.workspace.cleanup_totals = Some(totals);
+                            self.workspace.totals_error = None;
+                        }
+                        Err(error) => self.workspace.totals_error = Some(error),
+                    }
+                    self.analysis = None;
                     self.message = format!(
                         "{} files moved to Trash; {} not confirmed moved. {}",
                         result.moved,
@@ -317,6 +387,10 @@ impl Burrow {
                     self.message = error;
                 }
                 Event::Notice(message) => self.message = message,
+                Event::PreferencesUnreadable(error) => {
+                    self.workspace.preferences_error = Some(error.clone());
+                    self.message = error;
+                }
                 Event::PreferencesSaved => {
                     self.workspace.preferences_error = None;
                     self.message =
@@ -326,12 +400,35 @@ impl Burrow {
                     self.workspace.app_selected = None;
                     self.workspace.app_details.clear();
                     self.workspace.app_plan = None;
+                    self.workspace.file_review = None;
+                    self.workspace.file_ack = false;
                     self.workspace.app_ack = false;
                     self.workspace.apps = Some(inventory);
                     self.workspace.refilter_apps();
                 }
                 Event::Startup(items) => self.workspace.startup = Some(items),
                 Event::UpdateReport(report) => self.workspace.update_report = report,
+                Event::UpdatesFound(catalog) => {
+                    self.workspace.update_catalog = Some(catalog);
+                    self.workspace.update_selected.clear();
+                }
+                Event::UpdatesInstalled(results) => {
+                    let completed = results
+                        .iter()
+                        .filter(|r| r.state == updates::State::ProviderCompleted)
+                        .count();
+                    self.message = format!(
+                        "Update run ended: {completed} provider completions, {} other results. Check the per-app report before retrying.",
+                        results.len() - completed
+                    );
+                    self.workspace.update_results = results;
+                    self.workspace.update_catalog = None;
+                    self.workspace.update_selected.clear();
+                    self.workspace.apps = None;
+                    self.workspace.app_selected = None;
+                    self.workspace.app_rows.clear();
+                    self.workspace.app_details.clear();
+                }
                 Event::AppDetails(report) => self.workspace.app_details = report,
                 Event::AppPlan(plan) => {
                     self.workspace.app_plan = Some(plan);
@@ -596,6 +693,7 @@ impl Burrow {
         }
     }
     fn last_report(&mut self, ui: &mut egui::Ui) {
+        self.file_totals(ui);
         if let Some(report) = &self.report {
             ui.add_space(12.0);
             design::muted(
@@ -631,8 +729,8 @@ impl Burrow {
             ui.label("Keep backups and close affected apps. Trash is not a backup. Moving files does not free disk space until you empty Trash yourself. Burrow never empties it.");
             ui.label("Mac app removal moves only the reviewed app bundle. Windows uninstall and startup changes stay in system settings. Some advanced Mole features are not implemented; the feature guide lists them plainly.");
             ui.add_space(12.0);design::title(ui,"Privacy and performance",18.0);
-            ui.label("A native Rust app, not a browser. Scans and readings stay on your computer. App-update checks use the internet only after you allow and start them. No accounts, ads or telemetry.");
-            ui.label("Cache choices and protected-folder paths are saved locally. Inventories and session logs are not saved automatically. The mini monitor closes when you quit Burrow.");
+            ui.label("A native Rust app, not a browser. Scans and readings stay on your computer. Update checks and reviewed package installs use the internet only after you allow and start them. No accounts, ads or telemetry.");
+            ui.label("Cache choices, protected-folder paths and path-free file-cleanup totals are saved locally. Inventories and session logs are not saved automatically. The mini monitor closes when you quit Burrow.");
             ui.add_space(12.0);design::title(ui,"Keyboard shortcuts",18.0);
             ui.label("Ctrl / Command + 1–5: Clean, Apps, Optimize, Analyze, Status. + 6: Help. Tab and Space: controls. Escape: close a review or request Stop. Plus/minus: text size.");
             ui.add_space(10.0);ui.horizontal_wrapped(|ui|{
@@ -749,6 +847,8 @@ impl Burrow {
         self.confirm
             || self.show_log
             || self.workspace.app_plan.is_some()
+            || self.workspace.file_review.is_some()
+            || self.workspace.update_plan.is_some()
             || self.workspace.maintenance_confirm
             || self.workspace.reset_preferences
     }
@@ -792,7 +892,11 @@ impl Burrow {
             if ctx.input(|i| i.viewport().close_requested()) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.control.stop();
-                self.message = "Stopping the task. Close again after it finishes; completed moves are not undone.".into();
+                self.message = if self.busy == Some("Installing reviewed updates") {
+                    "Stopping the update queue after the current installer returns. Close again when it finishes; completed updates are not undone."
+                } else {
+                    "Stopping the task. Close again after it finishes; completed moves are not undone."
+                }.into();
             }
         }
         if !self.modal_open() {
@@ -810,7 +914,13 @@ impl Burrow {
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.workspace.app_plan.is_some() {
+            if self.workspace.file_review.is_some() {
+                self.workspace.file_review = None;
+                self.workspace.file_ack = false;
+            } else if self.workspace.update_plan.is_some() {
+                self.workspace.update_plan = None;
+                self.workspace.update_ack = false;
+            } else if self.workspace.app_plan.is_some() {
                 self.workspace.app_plan = None;
                 self.workspace.app_ack = false;
             } else if self.workspace.reset_preferences {
@@ -832,14 +942,28 @@ impl Burrow {
                 ui.horizontal(|ui| {
                     if let Some(task) = self.busy {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if secondary(ui, "Stop", !self.control.cancelled()).clicked() {
+                            if secondary(
+                                ui,
+                                if self.busy == Some("Installing reviewed updates") {
+                                    "Stop after current update"
+                                } else {
+                                    "Stop"
+                                },
+                                !self.control.cancelled(),
+                            )
+                            .clicked()
+                            {
                                 self.control.stop();
                             }
                             ui.add(
                                 egui::Label::new(format!(
                                     "{} · {} entries",
                                     if self.control.cancelled() {
-                                        "Stopping…"
+                                        if self.busy == Some("Installing reviewed updates") {
+                                            "Finishing the current installer…"
+                                        } else {
+                                            "Stopping…"
+                                        }
                                     } else {
                                         task
                                     },
@@ -914,6 +1038,8 @@ impl Burrow {
             });
         self.confirmation(ctx);
         self.workspace_confirmations(ctx);
+        self.file_confirmation(ctx);
+        self.update_confirmation(ctx);
         self.mini_monitor(ctx);
         if self.show_log {
             egui::Window::new("Cleanup session log").open(&mut self.show_log).default_size([680.0,400.0]).max_width((ctx.content_rect().width()-40.0).max(240.0)).show(ctx, |ui| {

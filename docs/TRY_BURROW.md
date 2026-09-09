@@ -1,87 +1,79 @@
-# First steps
+# Using Burrow
 
-Start with a small local folder. Keep backups, and leave system folders alone.
+This guide describes **0.3 development**, not the published 0.2 preview. Start with
+a small local folder and keep backups. [Need to install?](INSTALL.md)
 
-## Analyze: see where the space goes
+## Analyze: find large files
 
 Choose **Analyze → Choose folder → Analyze folder**. Larger rectangles represent
-more bytes. Click a folder to look inside it; the path buttons take you back up.
-Switch to **Largest files** for individual file sizes. Copy a path or show a folder
-in your file manager to investigate it.
+more bytes. Click a folder to look inside; breadcrumbs go back up. **Largest files**
+shows individual sizes. Copy a path or reveal it in your file manager to investigate.
 
-The map uses logical file sizes, not physical space that can be recovered. Links,
-cloud placeholders, other volumes, and unreadable items may be excluded. A partial
-scan says so. Analyze never deletes files.
+Scanning is read-only. To remove one file, click **Review…** in Largest files or
+right-click a file rectangle and choose its review action. Check the full path and
+size, acknowledge the warning, then choose **Move reviewed file to Trash**. Closing
+the review or pressing Escape does nothing to the file. Reviews expire after five
+minutes and changed files are refused.
 
-## Clean: review before moving anything
+Only individual regular local files inside your home folder are eligible. Folders,
+app-bundle contents, protected paths, links, and cloud placeholders are excluded.
+Maps use logical sizes, not recoverable physical space; partial scans say so.
 
-Open **Clean**, expand the cache choices, and turn off any group you do not want
-scanned. **Protect a folder** excludes that folder and its children from cache
-results. These choices are saved on your computer; they never expand where Clean
-is allowed to look.
+## Clean: remove only what you choose
 
-Scan old caches, inspect the paths, and select only files you understand. Close
-the apps that use them. Click **Review selection**, read the warning, and confirm.
-Nothing is preselected. A filter can hide a selected row without deselecting it;
-the selected total remains visible. **Clear selection** clears everything.
+Choose cache groups and **Protect a folder** as needed. Scan old caches, inspect
+the paths, and select only files you understand. Close affected apps. Choose
+**Review selection**, read the warning, and confirm. Nothing is preselected;
+**Clear selection** also clears selected rows hidden by a filter.
 
-Burrow asks the OS to move files to Trash or Recycle Bin. Check the result and
-copy the session log before quitting. Space is not freed until you empty Trash
-yourself; Burrow never does that for you.
+Check the result before retrying a failed move. Recover files through Trash or
+Recycle Bin. Stopping does not undo completed moves. Burrow never empties Trash.
+Saved totals count confirmed file moves since this feature was enabled, **not free
+space**. App bundles and older-version history are not included. Counts contain no
+filenames; detailed session reports disappear on quit unless you copy them.
 
-To recover a file, open Trash or Recycle Bin and use the OS recovery action.
-After an error, inspect both the original location and Trash before retrying.
-Stopping a run does not restore files that have already moved.
+An unreadable settings file pauses cache cleanup and manual file removal instead
+of ignoring protection. Read the error on Clean. Resetting settings requires a
+confirmation; add your protected folders again afterward. Read-only scans still work.
 
-## Apps: inspect, update, or manage startup
+## Apps: inspect, uninstall, or update
 
-**Installed:** click Find installed apps. Search by name or publisher, select an
-app, and measure its folder or show it in your file manager. Reported Windows
-sizes are estimates supplied by publishers. Mac app sizes are measured on demand.
+**Installed:** find apps, search by name or publisher, and select one to inspect its
+folder. Windows publisher sizes are estimates. Mac sizes are measured on demand.
+Mac removal has a separate, expiring review and moves the bundle only; related data
+is kept. Apps with services or drivers need the vendor's uninstaller. Windows
+removal opens Installed apps and never runs registry command strings itself.
 
-**Mac removal:** review a selected app, quit it, then confirm moving the bundle to
-Trash. The review expires after five minutes and is checked again for changes.
-Related settings and data are kept. Burrow does not remove Apple system apps or
-itself. Apps with drivers, extensions, or background services may require their
-vendor's uninstaller instead.
+**Updates:** enable internet access, then choose **Find installable updates**.
+Select apps, choose **Review selected updates**, read the warning, and confirm.
+Homebrew casks are supported on Mac. Windows install controls require already
+installed PowerShell 7 and `Microsoft.WinGet.Client`; only current-user packages
+from the configured `winget` source are attempted. No provider is installed for you.
+**Read provider report** remains a non-installing alternative. Other sources,
+including App Store and Sparkle, use their own updaters.
 
-**Windows removal:** click Uninstall in Windows, find the app there, and use its
-uninstaller. Burrow does not execute registry uninstall command strings.
+Save work, close selected apps, and do not run another package manager operation
+at the same time. Vendor installers can change app data and dependencies. Each
+entry is checked again; a changed entry, expired review, or failure stops the queue.
+**Stop after current update** lets the current installer return and skips the rest.
+Closing Burrow follows the same rule. Completed changes cannot be undone by Burrow.
+Read each outcome, reopen the app to check its version, and inspect the package
+manager after an error. No automatic retries, reboots, or agreement acceptance.
 
-**Updates:** enable the internet check, then check WinGet on Windows or Homebrew
-casks on Mac. This does not install updates. Use the original updater or store to
-install them. Apps outside those sources need their own update check.
+**Startup:** inspect registrations, then open OS settings to make changes. Being
+listed does not mean an item is enabled or running; coverage is not exhaustive.
 
-**Startup:** read registered startup items, then open system settings to change
-startup behavior. A registration is not proof that the item is enabled or running.
-This list does not cover every modern Mac login item or Windows scheduled task.
+## Optimize and Status
 
-## Optimize: choose a specific task
+**Optimize:** review a supported task before running it. Failures remain failures;
+Burrow does not promise a faster computer. **Keep screen on** lasts 30 minutes;
+Stop or Quit releases it. OS sleep policies and lid behavior still apply.
 
-Select a supported task and review it before running it. The result says whether
-the OS tool completed, failed, or was skipped. Cache rebuilding can briefly slow
-an app while it creates new files. Burrow does not promise a faster computer.
+**Status:** inspect CPU, memory, drives, processes, and available power/sensor data.
+Search or pin a process; use the system monitor for process actions. One fully used
+core counts as 100% process CPU. Missing sensors show unavailable, not zero.
+**Mini monitor** opens a separate floating window, not a tray/menu-bar popover.
+Closing it leaves Burrow open; quitting closes both.
 
-The screen-on button starts a 30-minute session. Stop it at any time; quitting
-Burrow releases the request. It may use more battery. Explicit Sleep, lid behavior,
-and device policies still belong to the OS.
-
-## Status: find what is busy
-
-CPU and memory readings refresh every two seconds. Process and network readings
-refresh every three seconds while Status or the mini monitor is visible. Battery
-readings refresh every 30 seconds. Missing sensors show as unavailable.
-
-Search processes by name or PID, sort by CPU or memory, and pin a process near the
-top. A process can use more than 100% CPU because one full core counts as 100%.
-Open the system monitor for process actions; Burrow does not force-quit apps.
-
-**Mini monitor** opens a small floating, always-on-top window. It is not a menu-bar
-or system-tray app. Closing it leaves the main app open; quitting Burrow closes both.
-
-## Saved settings could not be read or saved
-
-Clean pauses instead of silently forgetting a protected folder. The error remains
-visible on the Clean page. **Reset cleanup settings** asks before replacing the
-saved choices with defaults; add your protected folders again before cleaning.
-Analyze and the other workspaces still work while Clean is paused.
+**Keyboard:** Ctrl/Command+1–5 changes workspace; +6 opens Help. Tab/Space operates
+controls; Escape closes a review or requests Stop. Plus/minus adjusts text size.

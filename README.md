@@ -1,66 +1,53 @@
 # Burrow
 
-**Find what is taking up space. Decide what to remove.**
+**See what takes up space. Choose what to remove.**
 
-Burrow is a free desktop utility for Mac and Windows. It helps you review old
-caches, explore storage, inspect installed apps, and see what your computer is
-doing. It is inspired by Mole, but is an independent project—not the official
-Mole app.
+A free, native desktop utility for Mac and Windows. No account, subscription,
+ads, Electron, or background service. Inspired by Mole; not the official Mole app.
 
-**[Download Burrow](https://github.com/NobleSpartan6/burrow/releases)** ·
-**[Install or update](docs/INSTALL.md)** · **[First steps](docs/TRY_BURROW.md)**
+## Install
 
-## Choose your download
+**The installable baseline is [Burrow 0.2.0 preview](https://github.com/NobleSpartan6/burrow/releases/tag/v0.2.0-preview-2e38c4c).**
+This `burrow/0.3.0-workspaces` branch is development source, not a published 0.3
+release. Features below describe this branch, not the older download.
 
-| Computer | File to download |
+| Your computer | Download 0.2.0 |
 | --- | --- |
-| Mac with an Apple M-series chip | `Burrow-…-macOS-AppleSilicon.dmg` |
-| Mac with an Intel processor | `Burrow-…-macOS-Intel.dmg` |
-| Windows with an Intel or AMD 64-bit processor | `Burrow-…-Windows-x64-Setup.exe` |
+| Mac with an Apple M-series chip | [Apple Silicon DMG](https://github.com/NobleSpartan6/burrow/releases/download/v0.2.0-preview-2e38c4c/Burrow-0.2.0-macOS-AppleSilicon.dmg) |
+| Mac with an Intel processor | [Intel DMG](https://github.com/NobleSpartan6/burrow/releases/download/v0.2.0-preview-2e38c4c/Burrow-0.2.0-macOS-Intel.dmg) |
+| Windows, Intel or AMD 64-bit processor | [Windows installer](https://github.com/NobleSpartan6/burrow/releases/download/v0.2.0-preview-2e38c4c/Burrow-0.2.0-Windows-x64-Setup.exe) |
 
-On Mac, open the download and drag Burrow into Applications. On Windows, open
-the installer and choose Install. No terminal, account, or subscription is needed.
+**Mac:** open the DMG and drag Burrow into Applications. **Windows:** open the
+installer and choose Install. No terminal or GitHub account is needed.
 
-**This is preview software.** Windows downloads are unsigned. Mac downloads are
-ad-hoc signed but not notarized. Read the [installation guide](docs/INSTALL.md)
-before opening a download; do not turn off your computer's security protections.
+These are unsigned/not-notarized previews. Do not disable security protections.
+[Installation, updates, and troubleshooting →](docs/INSTALL.md)
 
-## Five workspaces
+## What is in 0.3 development?
 
-| Workspace | What you can do in 0.3 |
+| Workspace | Use it to… |
 | --- | --- |
-| **Clean** | Review old cache files, exclude cache groups, protect folders, and move selected files to Trash or Recycle Bin. |
-| **Apps** | Find installed apps, inspect their files, read startup registrations, and check supported update sources. Review app-bundle removal on Mac; open the system uninstaller on Windows. |
-| **Optimize** | Review specific maintenance tasks and their results, open system tools, or keep the screen on for a timed session. |
-| **Analyze** | Explore a folder map, open a subfolder, follow breadcrumbs, and find the largest files. Nothing is deleted here. |
-| **Status** | See CPU, memory, network, battery, available temperatures, storage, and processes. Filter or pin processes, or open a small floating monitor. |
+| **Clean** | Review old caches, protect folders, and move chosen files to Trash. See locally saved cleanup totals. |
+| **Apps** | Inspect apps and startup entries, review supported package updates, remove a Mac app bundle, or open Windows' uninstaller. |
+| **Optimize** | Run a reviewed maintenance task, open a system tool, or keep the screen on for 30 minutes. |
+| **Analyze** | Explore a folder map and its largest files. Separately review an individual local file before moving it to Trash. |
+| **Status** | Check live resource readings, filter or pin processes, and open a small floating monitor. |
 
-Not every Mole feature is present. See [feature coverage](docs/FEATURES.md) for
-what works directly, what opens a system tool, and what is not supported.
+Nothing is selected or removed automatically. Keep backups and close affected
+apps first. **Moving files to Trash does not immediately free space.** Burrow
+never empties Trash. Package updates run vendor installers and cannot be undone
+by Burrow.
 
-## Your files stay in your control
+[How to use it](docs/TRY_BURROW.md) · [Supported features and remaining gaps](docs/FEATURES.md)
 
-Nothing is selected or removed automatically. Clean only scans a short list of
-known cache folders. It does not sweep your documents or whole system. Mac app
-removal has a separate review and keeps related data; use the vendor's uninstaller
-for apps with services or drivers.
+## For contributors
 
-Keep backups. Moving files to Trash **does not immediately free space**. Burrow
-never empties Trash, and stopping a task does not undo completed changes.
+Rust + egui, bounded workers, virtualized lists, and no decorative animation loop.
+The 0.2 release and its upgrade-test baseline remain unchanged. A new release
+requires all existing native build, installer, recovery, and UI checks to pass.
 
-Burrow has no telemetry, ads, account, or subscription. Scans stay on your
-computer. App update checks contact your configured WinGet or Homebrew sources
-only after you enable the internet check. Cache exclusions and protected paths
-are saved locally; inventories and session logs are not saved automatically.
+[Build and test](docs/DEVELOPMENT.md) · [Performance](docs/PERFORMANCE.md) ·
+[Safety and privacy](SECURITY.md) · [Changes](CHANGELOG.md) · [MIT license](LICENSE)
 
-## Small by design
-
-Burrow uses native Rust and egui, not Electron or an embedded browser. Scans run
-away from the interface. Long lists draw only visible rows. There is no rotating
-planet, animated backdrop, or background service after you quit.
-
-[Performance notes](docs/PERFORMANCE.md) · [Build from source](docs/DEVELOPMENT.md) ·
-[Security and recovery](SECURITY.md) · [Changes](CHANGELOG.md) · [MIT license](LICENSE)
-
-Found a problem? [Report it here](https://github.com/NobleSpartan6/burrow/issues/new/choose).
-Please remove personal paths and private information from screenshots and logs.
+[Report a problem](https://github.com/NobleSpartan6/burrow/issues/new/choose).
+Include the version and OS; remove private paths and details from screenshots.

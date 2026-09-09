@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.3.0 — five workspaces
+## 0.3.0 — in development (not published)
+
+Continues from the unchanged 0.2.0 preview `v0.2.0-preview-2e38c4c`.
+
+New in this continuation: explicit single-file Trash reviews in Analyze;
+path-free atomic cleanup totals; selected, revalidated Homebrew/WinGet updates
+with stop-after-current behavior; Windows Clippy and Linux native-window discovery
+fixes; and shorter install/use/coverage guides that separate releases from source.
+No new runtime dependencies or expanded automatic cache roots.
 
 Adds app/startup inventories, opt-in update checks, reviewed Mac bundle removal,
 maintenance tasks, a timed screen-on session, a drill-down folder map, richer

@@ -21,6 +21,10 @@ pub(super) enum SoftwareTab {
 #[derive(Default)]
 pub(super) struct Workspaces {
     pub preferences: Preferences,
+    pub cleanup_totals: Option<cleanup_totals::Totals>,
+    pub totals_error: Option<String>,
+    pub file_review: Option<file_review::FileReview>,
+    pub file_ack: bool,
     pub preferences_error: Option<String>,
     pub reset_preferences: bool,
     pub details: DetailSnapshot,
@@ -41,6 +45,11 @@ pub(super) struct Workspaces {
     pub software_tab: SoftwareTab,
     pub startup: Option<Vec<StartupItem>>,
     pub update_report: String,
+    pub update_catalog: Option<updates::Catalog>,
+    pub update_selected: BTreeSet<usize>,
+    pub update_plan: Option<updates::Plan>,
+    pub update_ack: bool,
+    pub update_results: Vec<updates::Outcome>,
     pub allow_online: bool,
     pub maintenance_selected: Vec<Action>,
     pub maintenance_report: Vec<Record>,
@@ -118,7 +127,7 @@ impl Workspaces {
 fn subtitle(ui: &mut egui::Ui, title: &str, detail: &str) {
     page_heading(ui, title, detail);
 }
-fn clipped(ui: &mut egui::Ui, text: impl Into<String>) {
+pub(super) fn clipped(ui: &mut egui::Ui, text: impl Into<String>) {
     let text = text.into();
     ui.add(egui::Label::new(&text).truncate())
         .on_hover_text(&text);
@@ -221,19 +230,7 @@ impl Burrow {
             ui.add_space(12.0);
             match self.workspace.software_tab{
                 SoftwareTab::Installed=>self.installed_apps(ui,ctx),
-                SoftwareTab::Updates=>{
-                    design::title(ui,"Check supported update sources",20.0);
-                    design::muted(ui,"Uses WinGet on Windows or Homebrew casks on Mac. This check contacts your configured sources. It does not download or install app updates.");
-                    ui.checkbox(&mut self.workspace.allow_online,"Allow this update check to use the internet");
-                    ui.horizontal_wrapped(|ui|{
-                        if primary(ui,"Check for app updates",self.workspace.allow_online&&self.busy.is_none()).clicked(){self.start(Task::Updates,ctx);}
-                        if secondary(ui,"Open app store",self.busy.is_none()).clicked(){self.start(Task::OpenSettings(SettingsPage::Store),ctx);}
-                        if secondary(ui,"Open system updates",self.busy.is_none()).clicked(){self.start(Task::OpenSettings(SettingsPage::Updates),ctx);}
-                    });
-                    ui.add_space(12.0);
-                    if self.workspace.update_report.is_empty(){design::muted(ui,"No update check has run. Use each app's own updater for apps outside these sources.");}
-                    else{if secondary(ui,"Copy update report",true).clicked(){ctx.copy_text(self.workspace.update_report.clone());}ui.add(egui::Label::new(RichText::new(&self.workspace.update_report).monospace()).wrap());}
-                },
+                SoftwareTab::Updates=>self.updates_workspace(ui,ctx),
                 SoftwareTab::Startup=>{
                     design::title(ui,"What is registered to start",20.0);
                     design::muted(ui,"Registration does not mean an item is enabled or currently running. Use system settings to change startup behavior. Modern Mac login items and some Windows scheduled tasks are not listed here.");
@@ -512,7 +509,7 @@ impl Burrow {
     pub(super) fn analyze_workspace(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mut request = None;
         egui::ScrollArea::vertical().id_salt("analyze-page").show(ui,|ui|{
-            subtitle(ui,"See where your space goes.","A folder map and the largest files. Explore without deleting anything.");
+            subtitle(ui,"See where your space goes.","Explore a folder map. Individual files in your home folder can be moved to Trash after a separate review.");
             ui.horizontal_wrapped(|ui|{
                 if secondary(ui,"Choose folder…",self.busy.is_none()).clicked(){self.choose_folder();}
                 if primary(ui,"Analyze folder",self.folder.is_some()&&self.busy.is_none()).clicked(){request=self.folder.clone().map(Task::Analyze);}
@@ -550,9 +547,10 @@ impl Burrow {
                         if response.hovered(){ui.painter().rect_stroke(r,7,egui::Stroke::new(1.5,ACCENT),egui::StrokeKind::Inside);}
                         if r.width()>65.0&&r.height()>36.0{ui.painter().with_clip_rect(r.shrink(5.0)).text(r.center(),egui::Align2::CENTER_CENTER,&label,egui::FontId::proportional(13.0),design::TEXT);}
                         if response.clicked()&&is_dir&&self.busy.is_none(){request=path.cloned().map(Task::Analyze);}
-                        let response=response.on_hover_text(format!("{}\n{}",path.map(|p|p.display().to_string()).unwrap_or(name),if is_dir{"Click to look inside"}else{"Read-only item"}));
+                        let response=response.on_hover_text(format!("{}\n{}",path.map(|p|p.display().to_string()).unwrap_or(name),if is_dir{"Click to look inside"}else{"Right-click for file actions"}));
                         response.context_menu(|ui|{if let Some(path)=path{if ui.button("Copy path").clicked(){ctx.copy_text(path.display().to_string());ui.close();}
-if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager")).clicked(){request=Some(Task::Reveal(path.clone()));ui.close();}}});
+if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager")).clicked(){request=Some(Task::Reveal(path.clone()));ui.close();}
+if !is_dir && ui.add_enabled(self.busy.is_none() && self.workspace.preferences_error.is_none(),egui::Button::new("Review moving file to Trash…")).clicked(){request=Some(Task::ReviewFile{root:result.root.clone(),path:path.clone()});ui.close();}}});
                     }
                 }
                 ui.add_space(12.0);
@@ -566,8 +564,9 @@ if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager"))
             }else{
                 egui::ScrollArea::vertical().id_salt("top-file-list").max_height(480.0).show_rows(ui,58.0,result.top.len(),|ui,range|{for row in range{
                     let file=&result.top[row];ui.horizontal(|ui|{
-                        let w=(ui.available_width()-190.0).max(40.0);ui.allocate_ui(egui::vec2(w,48.0),|ui|{clipped(ui,file.path.file_name().unwrap_or_default().to_string_lossy().into_owned());ui.add(egui::Label::new(RichText::new(file.path.display().to_string()).size(11.0).color(MUTED)).truncate()).on_hover_text(file.path.display().to_string());});
+                        let w=(ui.available_width()-260.0).max(40.0);ui.allocate_ui(egui::vec2(w,48.0),|ui|{clipped(ui,file.path.file_name().unwrap_or_default().to_string_lossy().into_owned());ui.add(egui::Label::new(RichText::new(file.path.display().to_string()).size(11.0).color(MUTED)).truncate()).on_hover_text(file.path.display().to_string());});
                         ui.monospace(human_bytes(file.bytes));if ui.small_button("Copy path").clicked(){ctx.copy_text(file.path.display().to_string());}
+                        if ui.add_enabled(self.busy.is_none() && self.workspace.preferences_error.is_none(),egui::Button::new("Review…")).on_hover_text("Review moving this one file to Trash").clicked(){request=Some(Task::ReviewFile{root:result.root.clone(),path:file.path.clone()});}
                     });
                 }});
             }

@@ -49,7 +49,11 @@ where
         .stdout(stdout.try_clone().map_err(|e| e.to_string())?)
         .stderr(stderr.try_clone().map_err(|e| e.to_string())?)
         .env("HOMEBREW_NO_AUTO_UPDATE", "1")
-        .env("HOMEBREW_NO_ANALYTICS", "1");
+        .env("HOMEBREW_NO_ANALYTICS", "1")
+        .env("HOMEBREW_NO_INSTALL_CLEANUP", "1")
+        .env("HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK", "1")
+        .env("HOMEBREW_NO_UPGRADE_QUIT_CASKS", "1")
+        .env("HOMEBREW_NO_ASK", "1");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

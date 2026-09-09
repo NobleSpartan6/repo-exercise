@@ -49,10 +49,8 @@ impl Action {
         }
     }
     pub fn supported(self) -> bool {
-        match self {
-            Self::QuickLookCache | Self::QuickLookProviders => cfg!(target_os = "macos"),
-            _ => cfg!(any(windows, target_os = "macos")),
-        }
+        cfg!(target_os = "macos")
+            || (cfg!(windows) && !matches!(self, Self::QuickLookCache | Self::QuickLookProviders))
     }
 }
 #[derive(Clone, Debug)]

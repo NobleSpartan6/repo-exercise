@@ -1,49 +1,55 @@
 # Feature coverage
 
-Burrow 0.3 brings Mole's five-workspace structure to Mac and Windows. It is not a
-complete port of Mole. This table separates working features from system handoffs
-and features that are still missing.
+**0.3 development** continues from the [published 0.2.0 preview](https://github.com/NobleSpartan6/burrow/releases/tag/v0.2.0-preview-2e38c4c).
+It is not a complete port of [Mole](https://mole.fit/). “Built in” below describes
+source on this branch, not a claim that an unreleased installer has passed QA.
 
-| Feature | Burrow 0.3 |
-| --- | --- |
-| Old cache review and selected-file cleanup | Built in; narrow known cache folders only. |
-| Cache group choices and protected folders | Built in; saved locally. |
-| Cleanup confirmation and results | Built in; OS Trash/Recycle Bin, no permanent-delete fallback. |
-| App inventory, search, size inspection | Built in; Mac Applications folders; Windows desktop/Store registrations. Portable apps may be absent. |
-| App removal | Mac bundle-only review and Trash; Windows opens Installed apps for the vendor's uninstaller. |
-| Related app files | Exact bundle-ID matches can be inspected on Mac; they are never removed automatically. |
-| App update discovery | Opt-in WinGet or Homebrew cask check. Missing providers or source setup are reported. |
-| Installing app updates | Use the app's updater, package manager, or store. No built-in bulk update installer. |
-| Startup inventory | Windows Run keys and startup folders; Mac third-party LaunchAgents/LaunchDaemons. |
-| Startup changes | Opens the OS settings. No in-app service/agent toggles. |
-| Maintenance | Reviewed Quick Look tasks on Mac, local lookup-cache task on Mac/Windows, and system-tool shortcuts. |
-| Keep screen on | Opt-in 30-minute native request; stop early or quit to release it. |
-| Folder map and drill-down | Built in; breadcrumbs, direct-child totals, largest files, copy/reveal. Read-only. |
-| CPU, RAM, swap, disk, network, uptime | Built in using OS readings. No invented health score. |
-| Battery charge and power state | Built in where reported. Desktops may have no battery. |
-| Temperature | Shown only for sensors the OS provider exposes. |
-| Process list | Search, sort, and pin; opens the native system monitor for process actions. |
-| Small monitor | Floating native window; not a tray or menu-bar popover. |
-| Keyboard navigation and large text | Command/Ctrl+1–5 for workspaces; +6 for help; Command/Ctrl plus/minus for zoom. |
+| Capability | Mac | Windows |
+| --- | --- | --- |
+| Cache scan, explicit selection, Trash results | Built in | Built in, Recycle Bin |
+| Saved cache choices and protected folders | Built in | Built in |
+| Saved cleanup totals | Confirmed file-move counts only; no filenames or freed-space claim | Same |
+| Folder map, drill-down, breadcrumbs, largest files | Built in | Built in |
+| Analyze file removal | Separate reviewed, expiring single-file action inside home; no folders or app contents | Same; links/reparse/cloud placeholders excluded |
+| App inventory, search, size inspection | Application bundles; sizes on demand | Desktop/Store registrations; publisher size estimates |
+| App removal | Reviewed app bundle to Trash; related data kept | Opens OS/vendor uninstaller |
+| Related app files | Exact bundle-ID paths can be inspected | No automatic leftover sweep |
+| Update discovery | Opt-in Homebrew cask check | Opt-in WinGet report |
+| Selected package updates | Reviewed named casks via existing Homebrew | Reviewed current-user upgrades via existing WinGet, PowerShell 7 and Microsoft.WinGet.Client |
+| Startup inventory/changes | Read registrations; OS settings for changes | Read registrations; OS settings for changes |
+| Maintenance | Reviewed Quick Look/local lookup tasks and OS shortcuts | Reviewed local lookup task and OS shortcuts |
+| Keep screen on | Opt-in timed native request | Opt-in timed native request |
+| CPU, RAM, swap, disks, network, uptime | OS readings | OS readings |
+| Battery charge/power and temperatures | Only when the provider exposes them | Only when the provider exposes them |
+| Process search, sort, pin | Built in; OS monitor for actions | Same |
+| Mini monitor | Separate floating window | Separate floating window |
 
-## Not implemented yet
+## Update boundaries
 
-GPU utilization, fan RPM/control, battery health or charge limiting, Bluetooth
-accessory batteries, camera/microphone activity, tray/menu-bar integration, app
-icons and last-used dates, Sparkle/App Store update aggregation, one-click bulk
-uninstall with related data, arbitrary-file Trash actions in Analyze, historical
-lifetime cleanup totals, and the reference's planetary artwork are not implemented.
+No automatic selection or `upgrade all`. Plans expire five minutes after the
+check. Each selected entry is revalidated before execution; failures stop the
+remaining queue. Stop does not kill the current installer. Empty, duplicate,
+malformed, unsupported, or stale catalogs never become install commands.
 
-These are not hidden behind an upgrade or subscription. They need additional
-platform-specific providers, review, and tests. Unsupported readings are not
-presented as zero, and a system-settings shortcut is not called a completed action.
+The installer reports are provider results, not independent software audits.
+Windows installs are user-scope only; missing PowerShell/module prerequisites leave
+read-only reporting available. Homebrew metadata can change, and its selected cask
+version is ultimately chosen at execution. Homebrew automatic cleanup, dependent
+upgrades, and app-quitting are disabled; vendor installers still have their own
+side effects. App Store/Sparkle aggregation and OS-update installation are absent.
 
-## Deliberate safety differences
+## Still missing
 
-Burrow does not automatically choose files, empty Trash, permanently delete on
-failure, force-purge RAM, repair registry entries, force-quit processes, override
-thermal controls, or silently grant itself elevated permissions. These behaviors
-are not prerequisites for a useful storage utility.
+True tray/menu-bar integration; GPU utilization and fan RPM/control; battery health
+or charge limits; accessory batteries; camera/microphone activity; app icons and
+last-used dates; in-app startup toggles; related-data/bulk uninstall; folder removal
+in Analyze; process termination; and a complete cleanup history with recovery.
+Cleanup totals are not a retroactive history. Linux remains a source/QA target.
 
-Changing fan speeds, killing processes, and deleting shared app data have different
-risks from a read-only scan. They should not be added just to match a screenshot.
+## Deliberate differences
+
+Burrow does not automatically choose files, empty Trash, permanently delete after
+a Trash failure, force-purge RAM, repair registry entries, change thermal limits,
+or silently elevate itself. Those actions are not prerequisites for useful storage
+management. Unsupported readings and OS handoffs are labeled rather than presented
+as working native features. [Safety and privacy](../SECURITY.md)

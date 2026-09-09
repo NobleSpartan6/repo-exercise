@@ -1,49 +1,38 @@
-# Burrow 0.3.0 preview
+# Burrow 0.3.0 — release draft
 
-Five workspaces for reviewing storage and seeing what your computer is doing.
-Free, MIT-licensed, and built with native Rust/egui for Mac and Windows.
+This is unreleased development work. The published installer baseline remains
+[0.2.0 preview](https://github.com/NobleSpartan6/burrow/releases/tag/v0.2.0-preview-2e38c4c).
+Do not offer 0.3 installers until the full native release gates pass and a release
+is explicitly published.
 
-## New in this preview
+## What changes
 
-- **Clean:** saved cache-group choices and protected folders. The cache allowlist
-  is not expanded; nothing is selected or removed automatically.
-- **Apps:** installed-app search, size inspection, startup registrations, and
-  opt-in WinGet/Homebrew update checks. Mac bundle removal has a separate review;
-  Windows opens Installed apps for the vendor's uninstaller.
-- **Optimize:** reviewed maintenance tasks, per-task results, system-tool shortcuts,
-  and a timed screen-on session that ends when you stop it or quit.
-- **Analyze:** a read-only folder map with drill-down, breadcrumbs, direct-child
-  totals, and the largest files.
-- **Status:** process search/sort/pinning, network rates, swap, uptime, battery,
-  available temperatures, and a floating mini monitor.
-- Shorter README, clearer first steps, and an explicit feature-coverage table.
+Five native workspaces: Clean, Apps, Optimize, Analyze, and Status. They add saved
+cache choices and folder protection, app/startup inspection, reviewed Mac app-bundle
+removal, maintenance tasks, timed keep-awake, a drill-down folder map, process
+filtering/pinning, richer OS readings, and a floating mini monitor.
 
-[Install or update](https://github.com/NobleSpartan6/burrow/blob/main/docs/INSTALL.md)
-· [First steps](https://github.com/NobleSpartan6/burrow/blob/main/docs/TRY_BURROW.md)
-· [Feature coverage](https://github.com/NobleSpartan6/burrow/blob/main/docs/FEATURES.md)
+This continuation adds separate single-file Trash reviews in Analyze, path-free
+saved cleanup totals, and reviewed selected-package updates through existing
+Homebrew or WinGet providers. Clean reloads saved protections before acting and
+retains restrictions already shown in the current session. The automatic cache
+allowlist and the published 0.2 upgrade baseline are unchanged.
 
-## Install
+The README now links the exact published download. The install/use guides separate
+what is released, what is implemented in source, and what remains unsupported.
 
-On Windows, quit the old app and run `Burrow-0.3.0-Windows-x64-Setup.exe` under your
-normal account, keeping the installation folder. On Mac, choose the DMG for your
-chip, quit Burrow, and drag the new copy into Applications. Choose Replace.
-Source ZIPs are for developers. Check **? → About & help** for version 0.3.0.
+## Limits and recovery
 
-## Know before trying it
+This is not full Mole parity. [Feature coverage](FEATURES.md) lists the remaining
+gaps and update prerequisites. Windows structured updates require preinstalled
+PowerShell 7 and Microsoft.WinGet.Client and attempt current-user packages only.
+Package updates run vendor installers, can change dependencies/data, and have no
+Burrow rollback. Stop lets the current installer return before skipping the rest.
 
-This is not full Mole feature parity. There is no built-in bulk app updater,
-related-data deletion, GPU usage/fan control, battery-health management, or
-menu-bar/system-tray integration. The feature table explains other limits.
+Windows previews are unsigned; Mac previews are ad-hoc signed, not notarized. Do
+not disable security protections. Keep backups. Trash moves do not immediately
+free space, and Burrow never empties Trash or permanently deletes after a failure.
+Inspect both locations after an error. Hosted checks are not physical-device tests
+or a guarantee of zero bugs.
 
-Windows builds are unsigned. Mac builds are ad-hoc signed but not notarized. Do
-not disable security protections. Automated hosted-runner checks are not a
-physical-device test, independent security audit, or guarantee of zero bugs.
-
-Keep backups and try Analyze first. Moving files to Trash does not immediately
-free space. Burrow never empties Trash or permanently deletes when a move fails.
-Inspect Trash after errors; stopping a task does not undo completed changes.
-Use a vendor uninstaller for apps with drivers, extensions, or background services.
-
-Inventories stay local. App update checks use the internet only after you enable
-them. Cleanup preferences save protected paths locally; session logs and
-inventories are not saved automatically. Copy any log you need before quitting.
+[Installation](INSTALL.md) · [Using Burrow](TRY_BURROW.md) · [Safety and privacy](../SECURITY.md)

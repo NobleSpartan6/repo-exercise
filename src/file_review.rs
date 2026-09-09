@@ -74,14 +74,20 @@ fn location(
         return Err("Analyze can move individual files inside your home folder only. Use the system file manager for other locations.".into());
     }
     if preferences.excludes(&path)
-        || preferences.protected.iter().any(|p| p.canonicalize().is_ok_and(|p| path.starts_with(p)))
+        || preferences
+            .protected
+            .iter()
+            .any(|p| p.canonicalize().is_ok_and(|p| path.starts_with(p)))
     {
         return Err("This file is inside a protected folder. Nothing was moved.".into());
     }
     if path.ancestors().any(|p| {
-        p.extension().is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("app"))
+        p.extension()
+            .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("app"))
     }) {
-        return Err("Use Apps to review an app bundle; Analyze cannot remove files inside it.".into());
+        return Err(
+            "Use Apps to review an app bundle; Analyze cannot remove files inside it.".into(),
+        );
     }
     // Never turn this action into a way to empty Trash or remove Burrow's own
     // protection settings. These locations are intentionally not user-file cleanup.
@@ -91,11 +97,17 @@ fn location(
         }
     }
     if let Some(data) = dirs::data_local_dir()
-        && data.join("Burrow").canonicalize().is_ok_and(|p| path.starts_with(p))
+        && data
+            .join("Burrow")
+            .canonicalize()
+            .is_ok_and(|p| path.starts_with(p))
     {
         return Err("Burrow's saved settings and cleanup totals are protected.".into());
     }
-    if std::env::current_exe().and_then(|p| p.canonicalize()).is_ok_and(|p| p == path) {
+    if std::env::current_exe()
+        .and_then(|p| p.canonicalize())
+        .is_ok_and(|p| p == path)
+    {
         return Err("Burrow cannot remove its running executable.".into());
     }
     Ok((root, path))
@@ -113,7 +125,12 @@ fn review_in(
     }
     let (root, path) = location(root, path, home, preferences)?;
     let stamp = Stamp::read(&path)?;
-    Ok(FileReview { root, path, stamp, reviewed: Instant::now() })
+    Ok(FileReview {
+        root,
+        path,
+        stamp,
+        reviewed: Instant::now(),
+    })
 }
 
 pub fn review(
@@ -122,7 +139,13 @@ pub fn review(
     preferences: &Preferences,
     control: &Control,
 ) -> Result<FileReview, String> {
-    review_in(root, path, &dirs::home_dir().ok_or("Home folder is unavailable")?, preferences, control)
+    review_in(
+        root,
+        path,
+        &dirs::home_dir().ok_or("Home folder is unavailable")?,
+        preferences,
+        control,
+    )
 }
 
 fn execute_with(
@@ -140,18 +163,25 @@ fn execute_with(
     }
     let (root, path) = location(&review.root, &review.path, home, preferences)?;
     if root != review.root || path != review.path || Stamp::read(&path)? != review.stamp {
-        return Err("The file or its location changed after review. Analyze and review it again.".into());
+        return Err(
+            "The file or its location changed after review. Analyze and review it again.".into(),
+        );
     }
     if control.cancelled() {
         return Err("Stopped. The file was not moved.".into());
     }
-    recycle(&path).map_err(|e| format!("Move not confirmed: {e}. Inspect Trash before retrying."))?;
+    recycle(&path)
+        .map_err(|e| format!("Move not confirmed: {e}. Inspect Trash before retrying."))?;
     Ok(Cleanup {
         moved: 1,
         moved_bytes: review.bytes(),
         refused: 0,
         cancelled: false,
-        log: vec![format!("Moved to Trash: {} ({} bytes)", path.display(), review.bytes())],
+        log: vec![format!(
+            "Moved to Trash: {} ({} bytes)",
+            path.display(),
+            review.bytes()
+        )],
     })
 }
 
@@ -176,7 +206,14 @@ mod tests {
         let root = dir.path().canonicalize().unwrap();
         let path = root.join("review.txt");
         fs::write(&path, "original").unwrap();
-        let plan = review_in(&root, &path, &root, &Preferences::default(), &Control::default()).unwrap();
+        let plan = review_in(
+            &root,
+            &path,
+            &root,
+            &Preferences::default(),
+            &Control::default(),
+        )
+        .unwrap();
         (dir, root, plan)
     }
     #[test]
@@ -189,27 +226,64 @@ mod tests {
     fn changed_file_never_reaches_trash() {
         let (_dir, root, plan) = fixture();
         fs::write(plan.path(), "changed and longer").unwrap();
-        assert!(execute_with(&plan, &root, &Preferences::default(), &Control::default(), |_| panic!("must not recycle")).is_err());
+        assert!(
+            execute_with(
+                &plan,
+                &root,
+                &Preferences::default(),
+                &Control::default(),
+                |_| panic!("must not recycle")
+            )
+            .is_err()
+        );
     }
     #[test]
     fn new_protection_is_checked_at_execution() {
         let (_dir, root, plan) = fixture();
-        let prefs = Preferences { protected: vec![root.clone()], ..Default::default() };
-        assert!(execute_with(&plan, &root, &prefs, &Control::default(), |_| panic!("must not recycle")).is_err());
+        let prefs = Preferences {
+            protected: vec![root.clone()],
+            ..Default::default()
+        };
+        assert!(
+            execute_with(&plan, &root, &prefs, &Control::default(), |_| panic!(
+                "must not recycle"
+            ))
+            .is_err()
+        );
     }
     #[test]
     fn cancellation_and_expiration_never_reach_trash() {
         let (_dir, root, mut plan) = fixture();
         let control = Control::default();
         control.stop();
-        assert!(execute_with(&plan, &root, &Preferences::default(), &control, |_| panic!("must not recycle")).is_err());
+        assert!(
+            execute_with(&plan, &root, &Preferences::default(), &control, |_| panic!(
+                "must not recycle"
+            ))
+            .is_err()
+        );
         plan.reviewed = Instant::now() - Duration::from_secs(301);
-        assert!(execute_with(&plan, &root, &Preferences::default(), &Control::default(), |_| panic!("must not recycle")).is_err());
+        assert!(
+            execute_with(
+                &plan,
+                &root,
+                &Preferences::default(),
+                &Control::default(),
+                |_| panic!("must not recycle")
+            )
+            .is_err()
+        );
     }
     #[test]
     fn failures_are_not_successes_and_have_no_delete_fallback() {
         let (_dir, root, plan) = fixture();
-        let result = execute_with(&plan, &root, &Preferences::default(), &Control::default(), |_| Err("Recycle Bin unavailable".into()));
+        let result = execute_with(
+            &plan,
+            &root,
+            &Preferences::default(),
+            &Control::default(),
+            |_| Err("Recycle Bin unavailable".into()),
+        );
         assert!(result.unwrap_err().contains("not confirmed"));
         assert!(plan.path().exists());
     }
@@ -218,10 +292,29 @@ mod tests {
         let (_dir, root, plan) = fixture();
         let other = root.join("keep.txt");
         fs::write(&other, "keep").unwrap();
-        let result = execute_with(&plan, &root, &Preferences::default(), &Control::default(), |path| fs::remove_file(path).map_err(|e| e.to_string())).unwrap();
-        assert_eq!((result.moved, result.moved_bytes, result.refused), (1, 8, 0));
+        let result = execute_with(
+            &plan,
+            &root,
+            &Preferences::default(),
+            &Control::default(),
+            |path| fs::remove_file(path).map_err(|e| e.to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            (result.moved, result.moved_bytes, result.refused),
+            (1, 8, 0)
+        );
         assert!(other.exists());
-        assert!(execute_with(&plan, &root, &Preferences::default(), &Control::default(), |_| panic!("must not recycle twice")).is_err());
+        assert!(
+            execute_with(
+                &plan,
+                &root,
+                &Preferences::default(),
+                &Control::default(),
+                |_| panic!("must not recycle twice")
+            )
+            .is_err()
+        );
     }
     #[test]
     fn rejects_folders_outside_scope_and_app_contents() {
@@ -248,9 +341,27 @@ mod tests {
         fs::write(&replacement, "original").unwrap();
         fs::remove_file(plan.path()).unwrap();
         symlink(&replacement, plan.path()).unwrap();
-        assert!(execute_with(&plan, &root, &Preferences::default(), &Control::default(), |_| panic!("must not recycle")).is_err());
+        assert!(
+            execute_with(
+                &plan,
+                &root,
+                &Preferences::default(),
+                &Control::default(),
+                |_| panic!("must not recycle")
+            )
+            .is_err()
+        );
         fs::remove_file(plan.path()).unwrap();
         fs::hard_link(&replacement, plan.path()).unwrap();
-        assert!(review_in(&root, plan.path(), &root, &Preferences::default(), &Control::default()).is_err());
+        assert!(
+            review_in(
+                &root,
+                plan.path(),
+                &root,
+                &Preferences::default(),
+                &Control::default()
+            )
+            .is_err()
+        );
     }
 }

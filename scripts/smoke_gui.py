@@ -61,10 +61,19 @@ with (artifacts / 'gui.log').open('w') as log:
         mini = None
         for _ in range(60):
             try:
-                mini = output('xdotool', 'search', '--onlyvisible', '--name', '^Burrow — Mini monitor$').splitlines()[0]
+                mini = output('xdotool', 'search', '--onlyvisible', '--pid', str(process.pid), '--name', 'Mini monitor$').splitlines()[0]
                 break
             except (subprocess.CalledProcessError, IndexError): time.sleep(0.1)
-        if not mini or mini == window: raise AssertionError('Mini monitor did not create its own window')
+        # X11's legacy WM_NAME can transliterate the em dash in the title.
+        # Match its ASCII suffix and the app's PID, then require a separate window.
+        if not mini or mini == window:
+            try:
+                ids = output('xdotool', 'search', '--onlyvisible', '--pid', str(process.pid)).splitlines()
+                names = {wid: output('xdotool', 'getwindowname', wid) for wid in ids}
+            except subprocess.CalledProcessError:
+                names = {}
+            raise AssertionError(f'Mini monitor did not create its own window; visible app windows: {names}')
+        assert 'Mini monitor' in output('xdotool', 'getwindowname', mini)
         subprocess.check_call(['xdotool', 'windowfocus', '--sync', mini])
         time.sleep(2.3)
         subprocess.check_call(['scrot', '-u', str(artifacts / '08-mini-monitor.png')])

@@ -30,10 +30,12 @@ cargo test --locked --no-default-features --lib
 
 | Area | Files |
 | --- | --- |
-| Cache review, validation, Trash, folder totals | `src/engine.rs`, `src/platform.rs` |
+| Cache review, saved-policy enforcement, Trash, folder totals | `src/engine.rs`, `src/platform.rs`, `src/cleanup_policy.rs` |
 | App/startup discovery and Mac removal review | `src/software.rs` |
 | Fixed OS tools, deadlines, maintenance | `src/command.rs`, `src/maintenance.rs` |
-| Local cleanup choices | `src/preferences.rs` |
+| Local cleanup choices and path-free totals | `src/preferences.rs`, `src/cleanup_totals.rs` |
+| Explicit Analyze file reviews | `src/file_review.rs`, `src/file_actions.rs` |
+| Structured package updates and review UI | `src/updates.rs`, `src/update_actions.rs` |
 | Timed power request | `src/awake.rs` |
 | Sampling and bounded UI messages | `src/monitor.rs`, `src/latest.rs` |
 | Native workspaces and visual style | `src/ui.rs`, `src/workspaces.rs`, `src/design.rs` |
@@ -55,3 +57,19 @@ Linux pointer test. Neither mode is active in a normal launch.
 Do not weaken assertions or skip a failing platform to get a release through.
 Record the failure, fix its cause, rerun the affected tests, and inspect the UI.
 Do not claim full Mole parity: update [feature coverage](FEATURES.md) as work lands.
+
+## New review boundaries
+
+File-removal and package-update tests use disposable fixtures or injected providers,
+never personal files or real vendor installers. Tests cover changes since review,
+expiry, cancellation, malformed catalogs, duplicate IDs, empty selections, failed
+providers, protected paths, atomic totals, and concurrent writers. UI tests verify
+that internet consent and confirmation remain separate from navigation.
+
+The Windows updater requires preinstalled PowerShell 7 and Microsoft.WinGet.Client.
+Its fixed script uses the upstream `PSInstalledCatalogPackage`/`PSCatalogPackage`
+properties; never replace it with a parser for the localized `winget upgrade` table.
+Provider contracts: [WinGet upgrade](https://learn.microsoft.com/en-us/windows/package-manager/winget/upgrade),
+[WinGet objects](https://github.com/microsoft/winget-cli/tree/master/src/PowerShell/Microsoft.WinGet.Client.Engine/PSObjects),
+and [Homebrew manpage](https://docs.brew.sh/Manpage). Test provider installation
+behavior in disposable native environments before widening package-manager support.

@@ -265,9 +265,11 @@ fn online_checks_require_explicit_opt_in() {
     for _ in 0..3 {
         frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
     }
-    click(&mut app, &ctx, "Check for app updates");
-    assert!(app.busy.is_none());
-    assert!(!app.workspace.allow_online);
+    for label in ["Find installable updates", "Read provider report"] {
+        click(&mut app, &ctx, label);
+        assert!(app.busy.is_none());
+        assert!(!app.workspace.allow_online);
+    }
 }
 #[test]
 fn app_and_process_filters_keep_bounded_virtual_rows() {
@@ -375,4 +377,171 @@ fn refreshed_inventory_clears_previous_selection_and_details() {
     assert!(app.workspace.app_selected.is_none());
     assert!(app.workspace.app_details.is_empty());
     assert!(!app.workspace.app_ack);
+}
+
+#[test]
+fn unreadable_preferences_block_manual_file_reviews_too() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.workspace.preferences_error = Some("Unreadable".into());
+    app.start(
+        Task::ReviewFile {
+            root: PathBuf::from("/"),
+            path: PathBuf::from("/example"),
+        },
+        &ctx,
+    );
+    assert!(app.busy.is_none());
+    assert!(app.workspace.file_review.is_none());
+    assert!(app.message.contains("paused"));
+}
+
+#[test]
+fn confirmed_result_updates_totals_without_retrying_cleanup() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.tx
+        .send(Event::Cleaned(
+            Cleanup {
+                moved: 1,
+                moved_bytes: 42,
+                ..Default::default()
+            },
+            Ok(cleanup_totals::Totals {
+                runs: 1,
+                files: 1,
+                bytes: 42,
+            }),
+        ))
+        .unwrap();
+    app.receive();
+    assert_eq!(app.workspace.cleanup_totals.unwrap().bytes, 42);
+    assert_eq!(app.report.as_ref().unwrap().moved, 1);
+    assert!(app.busy.is_none());
+    app.tx
+        .send(Event::Cleaned(
+            Cleanup {
+                moved: 1,
+                moved_bytes: 9,
+                ..Default::default()
+            },
+            Err("Disk unavailable".into()),
+        ))
+        .unwrap();
+    app.receive();
+    assert_eq!(app.report.as_ref().unwrap().moved, 1);
+    assert!(app.workspace.totals_error.is_some());
+    assert!(app.message.contains("1 files moved"));
+    assert!(app.busy.is_none());
+}
+
+#[test]
+fn update_workers_require_consent_and_revocation_clears_selection() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    for task in [Task::Updates, Task::FindUpdates] {
+        app.start(task, &ctx);
+        assert!(app.busy.is_none());
+        assert!(app.message.contains("Allow internet"));
+    }
+    app.page = Page::Software;
+    app.workspace.software_tab = workspaces::SoftwareTab::Updates;
+    app.workspace.allow_online = true;
+    app.workspace.update_selected.insert(0);
+    for _ in 0..3 {
+        frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    }
+    click(&mut app, &ctx, "updates-online-consent");
+    assert!(!app.workspace.allow_online);
+    assert!(app.workspace.update_selected.is_empty());
+    assert!(app.workspace.update_plan.is_none());
+    assert!(app.busy.is_none());
+}
+
+#[test]
+fn update_and_startup_tabs_render_without_starting_provider_processes() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.page = Page::Software;
+    for tab in [
+        workspaces::SoftwareTab::Updates,
+        workspaces::SoftwareTab::Startup,
+    ] {
+        app.workspace.software_tab = tab;
+        for size in [[1060.0, 800.0], [720.0, 560.0], [480.0, 373.0]] {
+            for _ in 0..3 {
+                let output = frame(&mut app, &ctx, size, vec![]);
+                assert!(!output.shapes.is_empty());
+                assert!(output.shapes.len() < 2500);
+                assert!(app.busy.is_none());
+                assert!(!app.workspace.allow_online);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_file_review_needs_acknowledgement_and_escape_never_moves_it() {
+    // A uniquely named disposable fixture inside the required scope; never an existing home file.
+    // No Trash operation is invoked by this test.
+    let home = dirs::home_dir().unwrap().canonicalize().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix(".burrow-ui-review-")
+        .tempdir_in(home)
+        .unwrap();
+    let path = dir.path().join("keep-this-fixture.txt");
+    std::fs::write(&path, "unchanged fixture").unwrap();
+    let review = file_review::review(
+        dir.path(),
+        &path,
+        &Preferences::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.page = Page::Explorer;
+    app.workspace.file_review = Some(review);
+    for _ in 0..3 {
+        frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    }
+    assert!(app.modal_open());
+    assert!(!app.workspace.file_ack);
+    click(&mut app, &ctx, "Move reviewed file to Trash");
+    assert!(app.busy.is_none());
+    assert!(path.exists());
+    key(&mut app, &ctx, egui::Key::Num5, Modifiers::COMMAND);
+    assert!(app.page == Page::Explorer);
+    click(&mut app, &ctx, "file-acknowledge");
+    assert!(app.workspace.file_ack);
+    key(&mut app, &ctx, egui::Key::Escape, Modifiers::NONE);
+    assert!(!app.modal_open());
+    assert!(!app.workspace.file_ack);
+    assert!(app.busy.is_none());
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "unchanged fixture");
+}
+
+#[test]
+fn update_outcomes_keep_failures_and_invalidate_stale_inventory() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.workspace.apps = Some(software::Inventory::default());
+    app.workspace.app_details = "Stale size".into();
+    app.tx
+        .send(Event::UpdatesInstalled(vec![updates::Outcome {
+            name: "Example".into(),
+            id: "Example.App".into(),
+            state: updates::State::Failed,
+            detail: "Provider did not confirm completion".into(),
+        }]))
+        .unwrap();
+    app.receive();
+    assert!(app.message.contains("0 provider completions"));
+    assert_eq!(
+        app.workspace.update_results[0].state,
+        updates::State::Failed
+    );
+    assert!(app.workspace.apps.is_none());
+    assert!(app.workspace.app_details.is_empty());
+    assert!(app.busy.is_none());
 }
