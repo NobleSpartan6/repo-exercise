@@ -6,7 +6,7 @@ Burrow is a free desktop app. You do not need an account, payment card, Terminal
 
 ## 1. Get the right file
 
-Open https://github.com/NobleSpartan6/repo-exercise/releases in your browser. Choose the newest Burrow preview and expand **Assets**.
+Open https://github.com/NobleSpartan6/burrow/releases in your browser. Choose the newest Burrow preview and expand **Assets**.
 
 If there are no Burrow installer files, no prebuilt app has been published yet. The **Source code** downloads are for developers and are not installers. The repository owner can check the **Actions → Burrow — build, test and package** run; a failed or unfinished run is not a successful release.
 
@@ -53,7 +53,7 @@ For the portable version, right-click the downloaded ZIP, choose **Extract All**
 
 The preview is **not notarized** and has no trusted Developer ID signature. Its ad-hoc signature checks bundle integrity locally; it does **not** identify a trusted publisher or certify safety.
 
-Only proceed after verifying that the download came from **NobleSpartan6/repo-exercise** on GitHub and that you understand the preview risk. After attempting to open Burrow, macOS may offer **System Settings → Privacy & Security → Open Anyway** for that app. Read the confirmation and choose **Open** only when you trust this exact download.
+Only proceed after verifying that the download came from **NobleSpartan6/burrow** on GitHub and that you understand the preview risk. After attempting to open Burrow, macOS may offer **System Settings → Privacy & Security → Open Anyway** for that app. Read the confirmation and choose **Open** only when you trust this exact download.
 
 **Do not** disable Gatekeeper, remove quarantine attributes with Terminal, or weaken your computer's global security settings. If the warning says the app **will damage your computer**, is **malware**, or is **damaged**, stop rather than overriding it. On a managed computer, ask your IT administrator; do not bypass organizational policy.
 
@@ -125,8 +125,8 @@ an installable update.
 3. Open the installer under the same Windows user account. Keep the existing
    install location, select **Install**, and then **Finish**. You do not need to
    uninstall 0.1.0 first or choose **Run as administrator**.
-4. Open Burrow from Start. **About & help** and the sidebar show the installed
-   version. For this update, look for **0.1.1**.
+4. Open Burrow from Start. **About & help** and the footer show the installed
+   version. For this update, look for **0.2.0**.
 
 The installer keeps the same application identity and per-user location as
 0.1.0. In-place upgrade behavior still needs release-specific testing on a real
@@ -158,4 +158,6 @@ To uninstall on Mac, quit Burrow and move **Burrow.app** from Applications to Tr
 
 **Blank window or graphics error:** the app uses OpenGL. Remote desktop sessions, outdated graphics drivers, or restricted virtual machines may not expose a compatible graphics context. Report the OS version and the exact error; do not download drivers from an unknown website.
 
-**Need help:** open https://github.com/NobleSpartan6/repo-exercise/issues and include the app version, Mac/Windows version, and steps that reproduce the issue. Remove private usernames, folder paths and filenames from screenshots or copied logs before posting them publicly.
+**Need help:** open https://github.com/NobleSpartan6/burrow/issues and include the app version, Mac/Windows version, and steps that reproduce the issue. Remove private usernames, folder paths and filenames from screenshots or copied logs before posting them publicly.
+
+Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. Native QA uses an explicit `--smoke-test` launch with `BURROW_SMOKE_OUTPUT` pointing to an empty evidence directory. It captures the app's GPU surface using egui screenshot events, not the unsupported eframe screenshot environment variable. Normal launches never capture or save screenshots.

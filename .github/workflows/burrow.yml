@@ -49,10 +49,11 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install the pinned Rust compiler
-        run: rustup toolchain install 1.90.0 --profile minimal
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
       - name: Resolve dependencies once for all platforms
         run: |
           test -f Cargo.lock
+          cargo fmt --all -- --check
           python3 -m unittest discover -s scripts -p 'test_*.py'
           cargo metadata --locked --format-version 1 > dependency-metadata.json
           python3 scripts/package.py notices
@@ -64,11 +65,13 @@ jobs:
             Cargo.lock
             THIRD_PARTY_NOTICES.txt
           if-no-files-found: error
+          overwrite: true
       - uses: actions/upload-artifact@v4
         with:
           name: source-bundle
           path: dist/*-source.zip
           if-no-files-found: error
+          overwrite: true
 
   build:
     name: Test and build ${{ matrix.label }}
@@ -93,7 +96,7 @@ jobs:
     timeout-minutes: 45
     env:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
-      CARGO_TERM_COLOR: always
+      CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,18 +114,23 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot fonts-dejavu-core
       - name: Test packaging and release metadata
         run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Run unit tests on this operating system
         run: cargo test --locked --all-targets
+      - name: Verify one disposable native Trash round trip
+        if: runner.os != 'Linux'
+        run: cargo test --locked --lib engine::native_tests::native_trash_roundtrip -- --ignored --exact
       - name: Check Rust lints
-        run: cargo clippy --locked --all-targets
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Build optimized native executable
         run: cargo build --locked --release
       - name: Run the native GUI and exercise navigation
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s '-screen 0 1200x900x24' python3 scripts/smoke_gui.py
+        run: |
+          xvfb-run -a -s '-screen 0 1200x900x24' python3 scripts/smoke_gui.py
+          xvfb-run -a -s '-screen 0 1600x1200x24' python3 scripts/native_smoke.py
       - name: Measure a synthetic metadata scan
         if: runner.os == 'Linux'
         run: cargo run --locked --release --example scan_bench | tee -a "$GITHUB_STEP_SUMMARY"
@@ -132,18 +140,35 @@ jobs:
       - name: Package Windows installer and portable ZIP
         if: runner.os == 'Windows'
         run: python scripts/package.py windows
+      - name: Fetch verified old Windows installer
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v0.1.1-preview-f30ef4f --pattern '*Setup.exe' --dir "$RUNNER_TEMP/old-burrow"
+      - name: Test Windows installation upgrade launch and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BURROW_OLD_INSTALLER = (Get-ChildItem "$env:RUNNER_TEMP/old-burrow/*Setup.exe").FullName
+          python scripts/verify_install.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test copied Mac application from disk image
+        if: runner.os == 'macOS'
+        run: python3 scripts/verify_install.py '${{ matrix.package }}'
       - uses: actions/upload-artifact@v4
         if: runner.os != 'Linux'
         with:
           name: installer-${{ matrix.label }}
           path: dist/*
           if-no-files-found: error
+          overwrite: true
       - uses: actions/upload-artifact@v4
-        if: always() && runner.os == 'Linux'
+        if: always()
         with:
-          name: native-gui-QA
+          name: native-QA-${{ matrix.label }}
           path: artifacts/*
           if-no-files-found: warn
+          overwrite: true
 
   release:
     name: Publish an explicitly unsigned preview

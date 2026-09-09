@@ -10,7 +10,9 @@ pub struct CacheRoot {
 /// Documents, OS directories, package installations, or arbitrary temp trees.
 pub fn cache_roots() -> Vec<CacheRoot> {
     let mut roots = Vec::new();
-    let Some(home) = dirs::home_dir() else { return roots };
+    let Some(home) = dirs::home_dir() else {
+        return roots;
+    };
     if cfg!(target_os = "macos") {
         for (label, relative) in [
             ("Homebrew downloads", "Library/Caches/Homebrew/downloads"),
@@ -21,7 +23,10 @@ pub fn cache_roots() -> Vec<CacheRoot> {
             ("Edge cache", "Library/Caches/Microsoft Edge"),
             ("npm download cache", ".npm/_cacache"),
         ] {
-            roots.push(CacheRoot { label: label.into(), path: home.join(relative) });
+            roots.push(CacheRoot {
+                label: label.into(),
+                path: home.join(relative),
+            });
         }
     } else if cfg!(target_os = "windows") {
         // dirs uses the platform's local application data location, not a path
@@ -32,10 +37,19 @@ pub fn cache_roots() -> Vec<CacheRoot> {
                 ("Python uv cache", "uv/cache"),
                 ("Go build cache", "go-build"),
                 ("npm download cache", "npm-cache/_cacache"),
-                ("Chrome cache (Default profile)", "Google/Chrome/User Data/Default/Cache"),
-                ("Edge cache (Default profile)", "Microsoft/Edge/User Data/Default/Cache"),
+                (
+                    "Chrome cache (Default profile)",
+                    "Google/Chrome/User Data/Default/Cache",
+                ),
+                (
+                    "Edge cache (Default profile)",
+                    "Microsoft/Edge/User Data/Default/Cache",
+                ),
             ] {
-                roots.push(CacheRoot { label: label.into(), path: local.join(relative) });
+                roots.push(CacheRoot {
+                    label: label.into(),
+                    path: local.join(relative),
+                });
             }
         }
     }

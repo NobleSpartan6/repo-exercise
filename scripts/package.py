@@ -56,7 +56,7 @@ def png(size: int) -> bytes:
                     outer = x*x + y*y < 29*29
                     tunnel = x*x / (15*15) + (y-6)**2 / (19*19) < 1
                     inner = x*x / (8*8) + (y-10)**2 / (14*14) < 1
-                    color = (0, 0, 0, 0) if not outer else ((244, 252, 248, 255) if tunnel and not inner else (19, 124, 102, 255))
+                    color = (0, 0, 0, 0) if not outer else ((151, 228, 192, 255) if tunnel and not inner else (17, 21, 25, 255))
                     for i, value in enumerate(color):
                         channels[i] += value
             raw.extend(round(c / 4) for c in channels)
