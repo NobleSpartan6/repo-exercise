@@ -113,8 +113,14 @@ jobs:
       - name: Install Linux graphics and smoke-test utilities
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot fonts-dejavu-core
+          # Burrow needs Ubuntu graphics packages, not the runner's Chrome/MS feeds.
+          # Keep signature/checksum validation; scope only these commands, never
+          # alter the machine's repository configuration or ignore update errors.
+          ubuntu_sources=/etc/apt/sources.list.d/ubuntu.sources
+          test -s "$ubuntu_sources"
+          apt_options=(-o "Dir::Etc::sourcelist=$ubuntu_sources" -o 'Dir::Etc::sourceparts=-' -o 'Acquire::Retries=3' -o 'APT::Update::Error-Mode=any')
+          timeout 240s sudo apt-get "${apt_options[@]}" update
+          timeout 240s sudo apt-get "${apt_options[@]}" install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri xvfb xdotool scrot fonts-dejavu-core
       - name: Test packaging and release metadata
         run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Run unit tests on this operating system
