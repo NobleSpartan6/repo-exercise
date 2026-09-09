@@ -480,7 +480,7 @@ impl Burrow {
                                     egui::WidgetType::Checkbox,
                                     ui.is_enabled(),
                                     checked,
-                                    &format!("Select {}", file.path.display()),
+                                    format!("Select {}", file.path.display()),
                                 )
                             });
                             if response.changed() {
