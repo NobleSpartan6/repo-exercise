@@ -1,0 +1,19 @@
+name: Prepare native regression corrections
+on:
+  push:
+    branches: ['release-prep/0.2.0-resilience']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Validate locked native corrections and export reviewed blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/repair_native.py
