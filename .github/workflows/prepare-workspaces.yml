@@ -30,16 +30,13 @@ jobs:
           python3 - <<'PY'
           import base64, json, subprocess, zipfile
           from pathlib import Path
-          def post(endpoint,value):
-              return json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/'+endpoint,'--input','-'],input=json.dumps(value).encode()))
           entries=[]
           paths=json.loads(Path('.github/staging/paths.json').read_text())
           for name in paths:
-              blob=post('git/blobs',{'content':base64.b64encode(Path(name).read_bytes()).decode(),'encoding':'base64'})
+              blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':base64.b64encode(Path(name).read_bytes()).decode(),'encoding':'base64'}).encode()))
               entries.append({'path':name,'mode':'100644','type':'blob','sha':blob['sha']})
-          tree=post('git/trees',{'base_tree':'27fbf3d9140c762de54a46154168cf7a9f3a3079','tree':entries})
           Path('prepared-entries.json').write_text(json.dumps(entries,indent=2))
-          print('PREPARED_TREE='+tree['sha'],flush=True)
+          print('PREPARED_ENTRIES='+json.dumps(entries),flush=True)
           with zipfile.ZipFile('prepared-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
               for name in paths: archive.write(name,name)
           PY
@@ -57,7 +54,15 @@ jobs:
           timeout 240s sudo apt-get "${opts[@]}" update
           timeout 240s sudo apt-get "${opts[@]}" install -y libxkbcommon-dev libxkbcommon-x11-0 libegl1-mesa-dev libgl1-mesa-dri
       - name: Native feature preflight
+        shell: bash
         run: |
-          cargo test --locked --all-targets
-          cargo clippy --locked --all-targets -- -D warnings
-          cargo test --locked --no-default-features --lib
+          set -o pipefail
+          cargo test --locked --all-targets 2>&1 | tee preflight.log
+          cargo clippy --locked --all-targets -- -D warnings 2>&1 | tee -a preflight.log
+          cargo test --locked --no-default-features --lib 2>&1 | tee -a preflight.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preflight-log
+          path: preflight.log
+          if-no-files-found: warn
