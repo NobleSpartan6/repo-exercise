@@ -44,6 +44,8 @@ an active screen-on request; no service is installed.
 Filesystem calls can block inside the OS. Cancellation is cooperative, not a
 promise to interrupt every stalled disk immediately. Partial scans and stale
 readings are labelled. Stopping a command or cleanup does not undo prior changes.
+Network rates sum non-loopback interfaces; VPNs and other virtual interfaces can
+count the same traffic more than once. They are not an internet-speed test.
 
 ## Measure rather than guess
 

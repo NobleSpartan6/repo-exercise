@@ -53,7 +53,26 @@ fn json_rows(input: &str) -> Result<Vec<serde_json::Value>, String> {
     }
 }
 pub fn parse_windows_apps(input: &str) -> Result<Inventory, String> {
-    let rows = json_rows(input)?;
+    let mut rows = json_rows(input)?;
+    let mut source_notes = Vec::new();
+    if rows.len() == 1 && rows[0].get("apps").is_some() {
+        let mut envelope = rows.pop().ok_or("Missing inventory")?;
+        let apps = envelope.get_mut("apps").ok_or("Missing apps")?.take();
+        rows = match apps {
+            serde_json::Value::Array(rows) => rows,
+            _ => return Err("Unexpected app inventory format".into()),
+        };
+        if let Some(notes) = envelope["notes"].as_array() {
+            for note in notes.iter().take(12).filter_map(serde_json::Value::as_str) {
+                source_notes.push(
+                    note.chars()
+                        .filter(|c| !c.is_control())
+                        .take(4096)
+                        .collect::<String>(),
+                );
+            }
+        }
+    }
     let partial = rows.len() > MAX_APPS;
     let mut apps: Vec<_> = rows
         .into_iter()
@@ -77,6 +96,7 @@ pub fn parse_windows_apps(input: &str) -> Result<Inventory, String> {
         .collect();
     apps.sort_by_cached_key(|a| a.name.to_lowercase());
     let mut notes=vec!["Windows desktop and Store registrations. Portable apps may not appear. Sizes are publisher estimates, not measured disk use.".into()];
+    notes.extend(source_notes);
     if partial {
         notes.push(format!("Showing the first {MAX_APPS} registrations."));
     }
@@ -86,19 +106,27 @@ pub fn parse_windows_apps(input: &str) -> Result<Inventory, String> {
 pub fn inventory(control: &Control) -> Result<Inventory, String> {
     #[cfg(windows)]
     {
-        let script = r#"$items = @();
+        let script = r#"$items = [System.Collections.Generic.List[object]]::new();
+        $notes = [System.Collections.Generic.List[string]]::new();
         foreach($r in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')) {
-          if(Test-Path -LiteralPath $r) { foreach($k in Get-ChildItem -LiteralPath $r) {
-            $v=Get-ItemProperty -LiteralPath $k.PSPath;
-            if($v.DisplayName -and !$v.SystemComponent) {
-              $items += [PSCustomObject]@{name=[string]$v.DisplayName;version=[string]$v.DisplayVersion;publisher=[string]$v.Publisher;path=[string]$v.InstallLocation;origin='Desktop';bytes=([long]$v.EstimatedSize*1024)};
-            }
-          }}
+          try { if(Test-Path -LiteralPath $r) { foreach($k in Get-ChildItem -LiteralPath $r) {
+            if($items.Count -ge 2001) { break }
+            try {
+              $v=Get-ItemProperty -LiteralPath $k.PSPath;
+              if($v.DisplayName -and !$v.SystemComponent) {
+                $items.Add([PSCustomObject]@{name=[string]$v.DisplayName;version=[string]$v.DisplayVersion;publisher=[string]$v.Publisher;path=[string]$v.InstallLocation;origin='Desktop';bytes=([long]$v.EstimatedSize*1024)});
+              }
+            } catch { if($notes.Count -lt 12){$notes.Add('Some desktop app registrations could not be read.')} }
+          }}} catch { if($notes.Count -lt 12){$notes.Add('A desktop app source could not be read: '+$_.Exception.Message)} }
         }
-        foreach($a in Get-AppxPackage) { if(!$a.IsFramework -and !$a.IsResourcePackage) {
-          $items += [PSCustomObject]@{name=[string]$a.Name;version=[string]$a.Version;publisher=[string]$a.Publisher;path=[string]$a.InstallLocation;origin='Store';bytes=0};
-        }}
-        ConvertTo-Json -InputObject @($items | Sort-Object name,version,path -Unique | Select-Object -First 2001) -Depth 3 -Compress"#;
+        try { foreach($a in Get-AppxPackage -ErrorAction Stop) {
+          if($items.Count -ge 2001) { break }
+          if(!$a.IsFramework -and !$a.IsResourcePackage) {
+            $items.Add([PSCustomObject]@{name=[string]$a.Name;version=[string]$a.Version;publisher=[string]$a.Publisher;path=[string]$a.InstallLocation;origin='Store';bytes=0});
+          }
+        }} catch { if($notes.Count -lt 12){$notes.Add('Store apps are unavailable; showing available desktop registrations. '+$_.Exception.Message)} }
+        if($items.Count -ge 2001){$notes.Add('Inventory reached the 2,000-app display limit; other registrations may be absent.')}
+        ConvertTo-Json -InputObject @{apps=@($items | Sort-Object name,version,path -Unique | Select-Object -First 2001);notes=@($notes | Select-Object -First 12)} -Depth 4 -Compress"#;
         parse_windows_apps(&command::powershell(script, control)?)
     }
     #[cfg(target_os = "macos")]
@@ -594,6 +622,24 @@ mod tests {
         let i=parse_windows_apps(r#"[{"name":"Something; Remove-Item C:\\*","path":"C:\\Apps","bytes":1024,"UninstallString":"cmd /c anything"}]"#).unwrap();
         assert_eq!(i.apps.len(), 1);
         assert_eq!(i.apps[0].estimated_bytes, Some(1024));
+    }
+    #[test]
+    fn partial_inventory_keeps_available_apps_and_source_errors() {
+        let i = parse_windows_apps(r#"{"apps":[{"name":"Local editor","origin":"Desktop"}],"notes":["Store source unavailable"]}"#).unwrap();
+        assert_eq!(i.apps.len(), 1);
+        assert!(
+            i.notes
+                .iter()
+                .any(|n| n.contains("Store source unavailable"))
+        );
+        assert!(parse_windows_apps(r#"{"apps":false}"#).is_err());
+        assert!(
+            parse_windows_apps(r#"{"apps":[],"notes":["No readable sources"]}"#)
+                .unwrap()
+                .notes
+                .len()
+                > 1
+        );
     }
     #[test]
     fn handles_empty_single_and_malformed_inventory() {

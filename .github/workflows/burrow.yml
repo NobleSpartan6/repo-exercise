@@ -125,6 +125,9 @@ jobs:
         run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Run unit tests on this operating system
         run: cargo test --locked --all-targets
+      - name: Test the library without desktop dependencies
+        if: runner.os == 'Linux'
+        run: cargo test --locked --no-default-features --lib
       - name: Verify one disposable native Trash round trip
         if: runner.os != 'Linux'
         run: cargo test --locked --lib engine::native_tests::native_trash_roundtrip -- --ignored --exact
@@ -153,7 +156,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download v0.1.1-preview-f30ef4f --pattern '*Setup.exe' --dir "$RUNNER_TEMP/old-burrow"
+        run: gh release download v0.2.0-preview-2e38c4c --pattern '*Setup.exe' --dir "$RUNNER_TEMP/old-burrow"
       - name: Test Windows installation upgrade launch and uninstall
         if: runner.os == 'Windows'
         shell: pwsh

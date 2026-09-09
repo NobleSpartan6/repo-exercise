@@ -193,6 +193,9 @@ pub fn open_settings(page: SettingsPage, control: &Control) -> Result<String, St
 
 /// Reveal a local path in the file manager; never execute the selected file.
 pub fn reveal(path: &Path, control: &Control) -> Result<String, String> {
+    if control.cancelled() {
+        return Err("Cancelled before opening a folder.".into());
+    }
     let path = crate::engine::checked_path(path)?;
     #[cfg(target_os = "macos")]
     {
@@ -234,6 +237,16 @@ pub fn reveal(path: &Path, control: &Control) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancelled_reveal_does_not_open_a_window() {
+        let c = Control::default();
+        c.stop();
+        assert!(
+            reveal(Path::new("not-a-path"), &c)
+                .unwrap_err()
+                .contains("Cancelled")
+        );
+    }
     #[test]
     fn rejects_relative_executables() {
         assert!(

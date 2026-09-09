@@ -100,6 +100,8 @@ pub fn configure(ctx: &egui::Context) {
         style.spacing.item_spacing = egui::vec2(10.0, 8.0);
         style.spacing.button_padding = egui::vec2(17.0, 11.0);
         style.spacing.interact_size.y = 36.0;
+        style.spacing.scroll = egui::style::ScrollStyle::solid();
+        style.spacing.scroll.bar_width = 8.0;
         style.animation_time = 0.0; // No animation-induced repaint loop.
         style
             .text_styles

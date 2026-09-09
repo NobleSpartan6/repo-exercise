@@ -685,6 +685,10 @@ impl Burrow {
             .frame(egui::Frame::new().fill(BG).inner_margin(16))
             .show(ctx, |ui| {
                 ui.add_enabled_ui(!self.modal_open(), |ui| {
+                    // Compact navigation must not inherit the larger action-button
+                    // padding. Segoe UI otherwise grows the help button past the rail.
+                    ui.spacing_mut().button_padding = egui::vec2(6.0, 8.0);
+                    ui.spacing_mut().interact_size.y = 34.0;
                     let width = ((ui.available_width() - 76.0) / 5.0).clamp(54.0, 100.0);
                     let nav_width = width * 5.0 + 22.0;
                     let pad = ((ui.available_width() - nav_width - 44.0) * 0.5).max(0.0);

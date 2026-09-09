@@ -51,6 +51,33 @@ with (artifacts / 'gui.log').open('w') as log:
                 if title in output('xdotool', 'getwindowname', window): break
                 time.sleep(0.1)
             else: raise AssertionError(f'Pointer navigation did not activate {title}')
+        # A real secondary native viewport must close without taking the main app down.
+        def hitbox(label):
+            rows = [line.split('\t') for line in (artifacts / 'gui.log').read_text(errors='replace').splitlines() if line.startswith(f'BURROW_HITBOX\t{label}\t')]
+            if not rows: raise AssertionError(f'Missing actual control: {label}')
+            return rows[-1][2:4]
+        x, y = hitbox('Mini monitor')
+        subprocess.check_call(['xdotool', 'mousemove', '--window', window, x, y, 'click', '1'])
+        mini = None
+        for _ in range(60):
+            try:
+                mini = output('xdotool', 'search', '--onlyvisible', '--name', '^Burrow — Mini monitor$').splitlines()[0]
+                break
+            except (subprocess.CalledProcessError, IndexError): time.sleep(0.1)
+        if not mini or mini == window: raise AssertionError('Mini monitor did not create its own window')
+        subprocess.check_call(['xdotool', 'windowfocus', '--sync', mini])
+        time.sleep(2.3)
+        subprocess.check_call(['scrot', '-u', str(artifacts / '08-mini-monitor.png')])
+        x, y = hitbox('Close mini monitor')
+        subprocess.check_call(['xdotool', 'mousemove', '--window', mini, x, y, 'click', '1'])
+        for _ in range(60):
+            if process.poll() is not None: raise AssertionError('Closing mini monitor closed the app')
+            try: output('xdotool', 'getwindowname', mini)
+            except subprocess.CalledProcessError: break
+            time.sleep(0.1)
+        else: raise AssertionError('Mini monitor did not close')
+        assert 'Status' in output('xdotool', 'getwindowname', window)
+        subprocess.check_call(['xdotool', 'windowfocus', '--sync', window])
         subprocess.check_call(['xdotool', 'key', '--clearmodifiers', 'ctrl+plus', 'ctrl+plus'])
         time.sleep(0.5)
         subprocess.check_call(['scrot', '-u', str(artifacts / '07-status-large-text.png')])
@@ -64,7 +91,7 @@ with (artifacts / 'gui.log').open('w') as log:
         a, _ = sample(); start = time.monotonic(); time.sleep(5); b, rss = sample()
         cpu = (b-a) / os.sysconf('SC_CLK_TCK') / (time.monotonic()-start) * 100
         (artifacts / 'IDLE-METRICS.txt').write_text(f'Linux CI warm idle, 5s sample: {cpu:.2f}% of one CPU core; RSS {rss/1048576:.1f} MiB.\nNot a Mac/Windows hardware claim.\n')
-        (artifacts / 'SMOKE-TEST.txt').write_text('PASS: native launch; six-page keyboard and pointer navigation; 1060x800 and 720x560; text zoom. No cleanup performed.\n')
+        (artifacts / 'SMOKE-TEST.txt').write_text('PASS: native launch; six-page keyboard and pointer navigation; 1060x800 and 720x560; text zoom; secondary monitor open/render/close keeps main window alive. No cleanup performed.\n')
     finally:
         process.terminate()
         try: process.wait(timeout=5)

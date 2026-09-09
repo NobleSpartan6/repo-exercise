@@ -24,14 +24,14 @@ def digest(path):
 
 def windows():
     old = Path(os.environ['BURROW_OLD_INSTALLER'])
-    if digest(old) != '94dcb42542d1cba4dad1936933d34e3c886de066d68441c0033a469068857e91':
-        raise ValueError('Old installer is not the verified 0.1.1 release asset')
+    if digest(old) != '162557bfe0911d4592f3aa9cfc1e60bc2b7ee23b2fedb928f577d4219cb731f1':
+        raise ValueError('Old installer is not the verified 0.2.0 release asset')
     logs = ROOT / 'artifacts'
     logs.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='burrow-install-', dir=os.environ['RUNNER_TEMP']) as temp:
         stage = Path(temp) / 'Burrow'
         args = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', f'/DIR={stage}']
-        run(old, *args, f'/LOG={logs / "install-0.1.1.log"}')
+        run(old, *args, f'/LOG={logs / "install-0.2.0.log"}')
         if not (stage / 'burrow.exe').is_file():
             raise RuntimeError('Old installer did not install the executable')
         run(DIST / f'Burrow-{VERSION}-Windows-x64-Setup.exe', *args, f'/LOG={logs / "upgrade.log"}')
@@ -44,7 +44,7 @@ def windows():
             time.sleep(0.1)
         else: raise RuntimeError('Uninstaller did not remove the application')
         (logs / 'INSTALL-TEST.txt').write_text(
-            f'PASS: verified 0.1.1 installer -> {VERSION} in-place upgrade -> byte-identical executable '
+            f'PASS: verified 0.2.0 installer -> {VERSION} in-place upgrade -> byte-identical executable '
             '-> native six-page render -> uninstall, in an isolated CI install directory.\n'
             'Not a physical-device, SmartScreen, or interactive installer-wizard certification.\n', encoding='utf-8')
 

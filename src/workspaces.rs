@@ -147,7 +147,7 @@ fn chart(ui: &mut egui::Ui, data: &VecDeque<(f32, f32)>, second: bool) {
 impl Burrow {
     pub(super) fn status_workspace(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         egui::ScrollArea::vertical().id_salt("status-page").show(ui,|ui|{
-            subtitle(ui,"Your computer, at a glance.","Live readings. No made-up health score or automatic fixes.");
+            subtitle(ui,"Your computer, at a glance.","CPU, memory, network and process activity.");
             ui.horizontal_wrapped(|ui|{
                 if secondary(ui,"Mini monitor",true).clicked(){self.workspace.mini.store(true,Ordering::Relaxed);}
                 if secondary(ui,"Open system monitor",self.busy.is_none()).clicked(){self.start(Task::OpenSettings(SettingsPage::Activity),ctx);}
@@ -174,16 +174,24 @@ impl Burrow {
             if let Some(when)=self.workspace.power.sampled_at && when.elapsed()>Duration::from_secs(75){ui.colored_label(AMBER,"Battery reading is stale.");}
             ui.add_space(16.0);design::title(ui,"Storage",19.0);
             if !self.drive_sample.ready{design::muted(ui,"Reading drive capacity…");}
-            for disk in &self.drive_sample.disks{
-                design::card().inner_margin(12).show(ui,|ui|{
+            let drive_columns=if ui.available_width()>540.0{2}else{1};
+            egui::ScrollArea::vertical().id_salt("status-volumes").max_height(145.0).show(ui,|ui|{
+                for row in self.drive_sample.disks.chunks(drive_columns){
+                    ui.columns(drive_columns,|columns|{for(i,disk)in row.iter().enumerate(){
+                        let ui=&mut columns[i];
+                        design::card().inner_margin(12).show(ui,|ui|{
+                            ui.set_min_width(ui.available_width());
                     clipped(ui,format!("{}  ·  {}",disk.name,disk.mount));
                     if let Some(cap)=DiskCapacity::new(disk.total,disk.available){
                         design::muted(ui,format!("{} free of {} · {:.0}% used",human_bytes(disk.available),human_bytes(disk.total),cap.used_fraction()*100.0));
                         design::bar(ui,cap.used_fraction(),if cap.space_level()==SpaceLevel::VeryLow{DANGER}else{ACCENT});
                     }else{design::muted(ui,"Capacity not reported");}
-                });
-            }
-            ui.add_space(16.0);design::title(ui,"Processes",19.0);
+                        });
+                    }});
+                    ui.add_space(5.0);
+                }
+            });
+            ui.add_space(12.0);design::title(ui,"Processes",19.0);
             let mut change=false;
             ui.horizontal_wrapped(|ui|{
                 change|=ui.add(egui::TextEdit::singleline(&mut self.workspace.process_filter).hint_text("Find a name or PID").desired_width(220.0)).changed();
@@ -394,6 +402,7 @@ impl Burrow {
             ui.add_space(15.0);
             for action in Action::ALL{
                 design::card().inner_margin(14).show(ui,|ui|{
+                    ui.set_min_width(ui.available_width());
                     let mut selected=self.workspace.maintenance_selected.contains(&action);
                     if ui.add_enabled(self.busy.is_none()&&action.supported(),egui::Checkbox::new(&mut selected,action.label())).changed(){
                         self.workspace.maintenance_selected.retain(|a|*a!=action);if selected{self.workspace.maintenance_selected.push(action);}
@@ -609,25 +618,42 @@ if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager"))
                 let up = sample.up;
                 let power = sample.power;
                 let content = |ui: &mut egui::Ui| {
-                    design::title(ui, "burrow", 21.0);
+                    ui.horizontal(|ui| {
+                        design::title(ui, "burrow", 21.0);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close =
+                                ui.small_button("Close").on_hover_text("Close mini monitor");
+                            design::record(&close, "Close mini monitor");
+                            if close.clicked() {
+                                open.store(false, Ordering::Relaxed);
+                                if class != egui::ViewportClass::Embedded {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                }
+                                ctx.request_repaint_of(egui::ViewportId::ROOT);
+                            }
+                        });
+                    });
                     design::muted(ui, "Live system readings");
                     ui.separator();
                     design::metric(
                         ui,
                         "CPU",
-                        &if ready {
-                            format!("{cpu:.0}%")
-                        } else {
-                            "—".into()
-                        },
+                        &cpu_fraction(cpu)
+                            .filter(|_| ready)
+                            .map(|fraction| format!("{:.0}%", fraction * 100.0))
+                            .unwrap_or_else(|| "—".into()),
                         "Total processor use",
                         cpu_fraction(cpu),
                     );
                     design::metric(
                         ui,
                         "Memory",
-                        &human_bytes(memory),
-                        &format!("of {}", human_bytes(total)),
+                        &Usage::new(memory, total)
+                            .map(|_| human_bytes(memory))
+                            .unwrap_or_else(|| "—".into()),
+                        &Usage::new(memory, total)
+                            .map(|_| format!("of {}", human_bytes(total)))
+                            .unwrap_or_else(|| "Reading memory…".into()),
                         Usage::new(memory, total).map(Usage::fraction),
                     );
                     ui.label(format!(
@@ -656,13 +682,6 @@ if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager"))
                             .is_none_or(|t| t.elapsed() > Duration::from_secs(12))
                     {
                         design::muted(ui, "Some readings are waiting or stale.");
-                    }
-                    if secondary(ui, "Close mini monitor", true).clicked() {
-                        open.store(false, Ordering::Relaxed);
-                        if class != egui::ViewportClass::Embedded {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                        }
-                        ctx.request_repaint_of(egui::ViewportId::ROOT);
                     }
                 };
                 if class == egui::ViewportClass::Embedded {
