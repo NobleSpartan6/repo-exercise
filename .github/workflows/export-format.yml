@@ -1,0 +1,28 @@
+name: Format one verified native lint correction
+on:
+  push:
+    branches: ['release-prep/0.2.0-resilience']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Export corrected UI blob without updating any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+          p=Path('src/ui.rs');s=p.read_text();old='&format!("Select {}", file.path.display())';assert s.count(old)==1
+          p.write_text(s.replace(old,'format!("Select {}", file.path.display())'))
+          subprocess.run(['cargo','fmt','--all'],check=True)
+          result=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':p.read_text(),'encoding':'utf-8'}).encode()))
+          print('CORRECTED_UI_BLOB='+result['sha'],flush=True)
+          PY

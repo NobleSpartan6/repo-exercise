@@ -93,6 +93,10 @@ fn all_pages_render_at_desktop_compact_and_large_text_sizes() {
             for name in ["Overview", "Clean up", "Disk explorer", "About & help"] {
                 let r = rect(&ctx, name);
                 assert!(
+                    r.height() <= 40.0,
+                    "Navigation wraps at {size:?}: {name} {r:?}"
+                );
+                assert!(
                     r.left() >= 0.0 && r.right() <= size[0],
                     "{name} clips at {size:?}: {r:?}"
                 );

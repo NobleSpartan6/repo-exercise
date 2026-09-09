@@ -35,7 +35,11 @@ impl<T> Latest<T> {
 
     /// The UI never waits for a worker. A contended sample arrives on a later frame.
     pub fn take(&self) -> Option<T> {
-        self.value.try_lock().ok()?.take()
+        match self.value.try_lock() {
+            Ok(mut value) => value.take(),
+            Err(std::sync::TryLockError::Poisoned(error)) => error.into_inner().take(),
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        }
     }
 }
 
@@ -86,5 +90,22 @@ mod tests {
         assert_eq!(Arc::strong_count(&old), 2);
         mailbox.publish(Arc::new(()));
         assert_eq!(Arc::strong_count(&old), 1);
+    }
+    #[test]
+    fn poisoned_writer_does_not_permanently_silence_readings() {
+        let mailbox = Latest::default();
+        mailbox.publish(7);
+        let writer = mailbox.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = writer.value.lock().unwrap();
+                panic!("simulated worker failure while locked");
+            })
+            .join()
+            .is_err()
+        );
+        assert_eq!(mailbox.take(), Some(7));
+        mailbox.publish(8);
+        assert_eq!(mailbox.take(), Some(8));
     }
 }

@@ -31,13 +31,15 @@ impl NativeCheck {
             return None;
         }
         if self.requested {
-            let image = ctx.input(|input| input.events.iter().find_map(|event| {
-                if let egui::Event::Screenshot { image, .. } = event {
-                    Some(image.clone())
-                } else {
-                    None
-                }
-            }));
+            let image = ctx.input(|input| {
+                input.events.iter().find_map(|event| {
+                    if let egui::Event::Screenshot { image, .. } = event {
+                        Some(image.clone())
+                    } else {
+                        None
+                    }
+                })
+            });
             if let Some(image) = image {
                 if let Err(error) = self.save(&image) {
                     self.fail(ctx, &error);
@@ -58,14 +60,22 @@ impl NativeCheck {
         ctx.request_repaint_after(Duration::from_millis(80));
         if !self.configured {
             let group = self.stage / 4;
-            let size = if group == 0 { [1060.0, 800.0] } else { [720.0, 560.0] };
+            let size = if group == 0 {
+                [1060.0, 800.0]
+            } else {
+                [720.0, 560.0]
+            };
             ctx.set_zoom_factor(if group == 2 { 1.5 } else { 1.0 });
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size.into()));
             self.configured = true;
             self.since = Instant::now();
             return Some(self.stage % 4);
         }
-        let settle = if self.stage == 0 { Duration::from_millis(2500) } else { Duration::from_millis(450) };
+        let settle = if self.stage == 0 {
+            Duration::from_millis(2500)
+        } else {
+            Duration::from_millis(450)
+        };
         if !self.requested && self.since.elapsed() >= settle {
             if self.output.is_some() {
                 self.requested = true;
@@ -93,7 +103,9 @@ impl NativeCheck {
     fn save(&self, image: &egui::ColorImage) -> Result<(), String> {
         let [width, height] = image.size;
         if width < 300 || height < 250 || width > 8192 || height > 8192 {
-            return Err(format!("Unexpected screenshot dimensions: {width}x{height}"));
+            return Err(format!(
+                "Unexpected screenshot dimensions: {width}x{height}"
+            ));
         }
         if image.pixels.len() != width * height {
             return Err("Screenshot pixel count does not match dimensions".into());
@@ -102,18 +114,26 @@ impl NativeCheck {
         let mut tones = std::collections::HashSet::new();
         for pixel in image.pixels.iter().step_by(11) {
             tones.insert(pixel.to_array());
-            if tones.len() >= 24 { break; }
+            if tones.len() >= 24 {
+                break;
+            }
         }
         if tones.len() < 24 {
             return Err("Blank or insufficiently rendered screenshot".into());
         }
-        let output = self.output.as_ref().ok_or("No screenshot output directory")?;
+        let output = self
+            .output
+            .as_ref()
+            .ok_or("No screenshot output directory")?;
         std::fs::create_dir_all(output).map_err(|e| e.to_string())?;
         let page = ["overview", "cleanup", "explorer", "help"][self.stage % 4];
         let size = ["desktop", "compact", "large-text"][self.stage / 4];
         let path = output.join(format!("native-{page}-{size}.png"));
         // Refuse to overwrite old evidence, rather than accidentally validating it.
-        let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path)
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
             .map_err(|e| e.to_string())?;
         let bytes: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
         let rgba = image::RgbaImage::from_raw(width as u32, height as u32, bytes)
