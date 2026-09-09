@@ -61,11 +61,12 @@ with (artifacts / 'gui.log').open('w') as log:
         mini = None
         for _ in range(60):
             try:
-                mini = output('xdotool', 'search', '--onlyvisible', '--pid', str(process.pid), '--name', 'Mini monitor$').splitlines()[0]
+                mini = output('xdotool', 'search', '--all', '--onlyvisible', '--pid', str(process.pid), '--name', 'Mini monitor$').splitlines()[0]
                 break
             except (subprocess.CalledProcessError, IndexError): time.sleep(0.1)
         # X11's legacy WM_NAME can transliterate the em dash in the title.
-        # Match its ASCII suffix and the app's PID, then require a separate window.
+        # Require BOTH its ASCII suffix and the app's PID, then a separate window.
+        # xdotool defaults to OR across search conditions unless --all is set.
         if not mini or mini == window:
             try:
                 ids = output('xdotool', 'search', '--onlyvisible', '--pid', str(process.pid)).splitlines()
