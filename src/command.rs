@@ -182,7 +182,7 @@ pub fn open_settings(page: SettingsPage, control: &Control) -> Result<String, St
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (page, control);
-        return Err("This shortcut is available on Mac and Windows.".into());
+        Err("This shortcut is available on Mac and Windows.".into())
     }
     #[cfg(any(windows, target_os = "macos"))]
     Ok(
@@ -225,7 +225,7 @@ pub fn reveal(path: &Path, control: &Control) -> Result<String, String> {
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = (path, control);
-        return Err("Use Copy path with your file manager on this OS.".into());
+        Err("Use Copy path with your file manager on this OS.".into())
     }
     #[cfg(any(windows, target_os = "macos"))]
     Ok("Opened the containing folder. No file was executed or removed.".into())

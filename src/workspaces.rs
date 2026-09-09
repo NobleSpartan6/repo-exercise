@@ -542,7 +542,8 @@ impl Burrow {
                         if r.width()>65.0&&r.height()>36.0{ui.painter().with_clip_rect(r.shrink(5.0)).text(r.center(),egui::Align2::CENTER_CENTER,&label,egui::FontId::proportional(13.0),design::TEXT);}
                         if response.clicked()&&is_dir&&self.busy.is_none(){request=path.cloned().map(Task::Analyze);}
                         let response=response.on_hover_text(format!("{}\n{}",path.map(|p|p.display().to_string()).unwrap_or(name),if is_dir{"Click to look inside"}else{"Read-only item"}));
-                        response.context_menu(|ui|{if let Some(path)=path{if ui.button("Copy path").clicked(){ctx.copy_text(path.display().to_string());ui.close();}if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager")).clicked(){request=Some(Task::Reveal(path.clone()));ui.close();}}});
+                        response.context_menu(|ui|{if let Some(path)=path{if ui.button("Copy path").clicked(){ctx.copy_text(path.display().to_string());ui.close();}
+if ui.add_enabled(self.busy.is_none(),egui::Button::new("Show in file manager")).clicked(){request=Some(Task::Reveal(path.clone()));ui.close();}}});
                     }
                 }
                 ui.add_space(12.0);

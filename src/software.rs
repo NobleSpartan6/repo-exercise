@@ -1,6 +1,7 @@
 //! Application and startup inventories. OS uninstall strings are data, never code.
+#[cfg(any(windows, target_os = "macos"))]
+use crate::command;
 use crate::{
-    command,
     engine::{self, Control},
     human_bytes,
 };

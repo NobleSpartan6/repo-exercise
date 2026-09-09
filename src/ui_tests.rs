@@ -360,3 +360,19 @@ fn broken_preferences_pause_cleanup_but_not_analysis_navigation() {
     app.receive();
     assert!(app.workspace.preferences_error.is_none());
 }
+
+#[test]
+fn refreshed_inventory_clears_previous_selection_and_details() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.workspace.app_selected = Some(0);
+    app.workspace.app_details = "Previous app details".into();
+    app.workspace.app_ack = true;
+    app.tx
+        .send(Event::Software(software::Inventory::default()))
+        .unwrap();
+    frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    assert!(app.workspace.app_selected.is_none());
+    assert!(app.workspace.app_details.is_empty());
+    assert!(!app.workspace.app_ack);
+}

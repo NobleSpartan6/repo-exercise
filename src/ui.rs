@@ -323,6 +323,10 @@ impl Burrow {
                         "Saved your cache choices and protected folders on this computer.".into();
                 }
                 Event::Software(inventory) => {
+                    self.workspace.app_selected = None;
+                    self.workspace.app_details.clear();
+                    self.workspace.app_plan = None;
+                    self.workspace.app_ack = false;
                     self.workspace.apps = Some(inventory);
                     self.workspace.refilter_apps();
                 }
