@@ -1,0 +1,31 @@
+name: Unblock corrected 0.2.0 release from superseded failed run
+on:
+  push:
+    branches: ['release-prep/0.2.0-unblock']
+permissions:
+  actions: write
+  contents: read
+jobs:
+  unblock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Cancel only the known obsolete run after confirming its Linux failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/NobleSpartan6/burrow/actions/runs/34383597459 > run.json
+          gh api repos/NobleSpartan6/burrow/actions/runs/34383597459/jobs > jobs.json
+          python3 - <<'PY'
+          import json, subprocess
+          run=json.load(open('run.json')); jobs=json.load(open('jobs.json'))['jobs']
+          assert run['head_sha']=='a0180efd051ca6a0fccdcb7378ea4801f3307081'
+          assert run['head_branch']=='main'
+          assert any(j['id']==102574335158 and j['conclusion']=='failure' for j in jobs)
+          if run['status']!='completed':
+              subprocess.run(['gh','api','--method','POST','repos/NobleSpartan6/burrow/actions/runs/34383597459/cancel'],check=True)
+              print('Cancelled only superseded run 34383597459; corrected run is still required to pass.')
+          else:
+              print('Obsolete run already finished; no operation.')
+          PY
