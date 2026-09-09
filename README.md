@@ -1,89 +1,66 @@
 # Burrow
 
-**Room to breathe.** A small, free, native desktop app for Mac and Windows.
+**Find what is taking up space. Decide what to remove.**
 
-[Download an installer](https://github.com/NobleSpartan6/burrow/releases) · [Install or update](docs/INSTALL.md) · [What's changed](CHANGELOG.md)
+Burrow is a free desktop utility for Mac and Windows. It helps you review old
+caches, explore storage, inspect installed apps, and see what your computer is
+doing. It is inspired by Mole, but is an independent project—not the official
+Mole app.
 
-Burrow 0.2 brings a quiet charcoal-and-mint interface, centered navigation, clearer
-system readings, and carefully spaced file lists. The design takes inspiration
-from Mole's restrained desktop interface without copying its branding or adding
-features Burrow does not implement.
+**[Download Burrow](https://github.com/NobleSpartan6/burrow/releases)** ·
+**[Install or update](docs/INSTALL.md)** · **[First steps](docs/TRY_BURROW.md)**
 
-## Install without a terminal
+## Choose your download
 
-Open **Releases**, choose the latest Burrow preview, and expand **Assets**.
+| Computer | File to download |
+| --- | --- |
+| Mac with an Apple M-series chip | `Burrow-…-macOS-AppleSilicon.dmg` |
+| Mac with an Intel processor | `Burrow-…-macOS-Intel.dmg` |
+| Windows with an Intel or AMD 64-bit processor | `Burrow-…-Windows-x64-Setup.exe` |
 
-| Your computer | Download | Install |
-|---|---|---|
-| Windows Intel/AMD 64-bit | `Windows-x64-Setup.exe` | Close Burrow, open the installer, then choose Install. |
-| Mac with an Apple M-series chip | `macOS-AppleSilicon.dmg` | Open the DMG and drag Burrow into Applications. |
-| Intel Mac | `macOS-Intel.dmg` | Open the DMG and drag Burrow into Applications. |
+On Mac, open the download and drag Burrow into Applications. On Windows, open
+the installer and choose Install. No terminal, account, or subscription is needed.
 
-To update, install over the existing copy; on Mac choose **Replace**. No developer
-tools or uninstall are needed. Windows portable ZIPs are separate installations.
-**Source ZIPs are not installers.** See the [plain-language guide](docs/INSTALL.md).
+**This is preview software.** Windows downloads are unsigned. Mac downloads are
+ad-hoc signed but not notarized. Read the [installation guide](docs/INSTALL.md)
+before opening a download; do not turn off your computer's security protections.
 
-**Preview notice:** Windows packages are not publisher-signed. Mac packages are
-ad-hoc signed but not notarized. Security warnings are possible. Do not disable
-system protections, use quarantine-removal commands, or run the app elevated.
-An automated test pass is not a guarantee of flawless operation on every machine.
+## Five workspaces
 
-## Four screens. Clear boundaries.
+| Workspace | What you can do in 0.3 |
+| --- | --- |
+| **Clean** | Review old cache files, exclude cache groups, protect folders, and move selected files to Trash or Recycle Bin. |
+| **Apps** | Find installed apps, inspect their files, read startup registrations, and check supported update sources. Review app-bundle removal on Mac; open the system uninstaller on Windows. |
+| **Optimize** | Review specific maintenance tasks and their results, open system tools, or keep the screen on for a timed session. |
+| **Analyze** | Explore a folder map, open a subfolder, follow breadcrumbs, and find the largest files. Nothing is deleted here. |
+| **Status** | See CPU, memory, network, battery, available temperatures, storage, and processes. Filter or pin processes, or open a small floating monitor. |
 
-**Overview** shows real CPU, memory, and OS-reported drive capacity. There is no
-invented health score or promise to speed up your computer.
+Not every Mole feature is present. See [feature coverage](docs/FEATURES.md) for
+what works directly, what opens a system tool, and what is not supported.
 
-**Clean up** reviews older files in a narrow cache allowlist. Nothing is
-preselected. Review paths, close affected apps, select files, and confirm before
-requesting a move to Trash / Recycle Bin. Files are revalidated before each move.
-No automatic cleanup; no empty-Trash command; no permanent-delete fallback in
-Burrow's own code. Trash behavior and recovery also depend on the operating system.
+## Your files stay in your control
 
-**Disk explorer** reads metadata to find the largest 200 files in a chosen folder.
-It cannot delete files. **About & help** explains the limits, shortcuts and updates.
+Nothing is selected or removed automatically. Clean only scans a short list of
+known cache folders. It does not sweep your documents or whole system. Mac app
+removal has a separate review and keeps related data; use the vendor's uninstaller
+for apps with services or drivers.
 
-Moving to Trash does **not** immediately free disk space. Recovery is not a
-backup. Cancellation does not undo completed moves. Keep backups and inspect
-Trash after an error. [Safety details](SECURITY.md).
+Keep backups. Moving files to Trash **does not immediately free space**. Burrow
+never empties Trash, and stopping a task does not undo completed changes.
+
+Burrow has no telemetry, ads, account, or subscription. Scans stay on your
+computer. App update checks contact your configured WinGet or Homebrew sources
+only after you enable the internet check. Cache exclusions and protected paths
+are saved locally; inventories and session logs are not saved automatically.
 
 ## Small by design
 
-Compiled Rust + GPU-rendered egui, not Electron or Chromium. Bounded scan workers,
-virtualized rows, cached preview totals, independent CPU/RAM and drive workers,
-no continuous decorative animation, no remote assets or bundled system fonts.
-Everything except user-clicked help links is local. No account, ads, telemetry,
-subscription, automatic updater, or service left running after quitting.
+Burrow uses native Rust and egui, not Electron or an embedded browser. Scans run
+away from the interface. Long lists draw only visible rows. There is no rotating
+planet, animated backdrop, or background service after you quit.
 
-[Performance and measurement](docs/PERFORMANCE.md) · [Design specification](docs/DESIGN.md)
+[Performance notes](docs/PERFORMANCE.md) · [Build from source](docs/DEVELOPMENT.md) ·
+[Security and recovery](SECURITY.md) · [Changes](CHANGELOG.md) · [MIT license](LICENSE)
 
-## Verification
-
-Releases are gated on native Mac/Windows builds, unit and interaction tests,
-packaging tests, a disposable native Trash/recovery check, Windows installation /
-in-place upgrade / launch / uninstall checks, copied Mac-app launch checks, and
-Linux screenshot/navigation/resize checks. Each release links its exact source
-commit and CI run. Read the actual run results rather than assuming a test passed.
-
-Physical machines, high-DPI assistive technology, Gatekeeper, SmartScreen, network
-volumes, and unusual OS configurations still need separate testing. See
-[release notes](docs/RELEASE_NOTES.md) and [maintainer instructions](docs/RELEASING.md).
-
-## Build from source (developers)
-
-Install the pinned Rust toolchain with rustup. On Windows use the MSVC toolchain
-and Visual Studio C++ build tools. On Mac install Xcode command-line tools.
-
-```sh
-cargo test --locked --all-targets
-cargo run --locked --release
-```
-
-`--version` prints the app version. `--smoke-test` opens the actual native window,
-renders all four screens without scanning or moving files, and closes it.
-No GUI-free mode performs cleanup. `cargo test --no-default-features` runs the
-engine without the desktop stack. Native packaging requires Python 3.11+;
-Windows packaging additionally needs Inno Setup 6.
-
-MIT licensed. Independent project; not affiliated with Mole, Tw93, or Faberon.
-
-Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. Native QA uses an explicit `--smoke-test` launch with `BURROW_SMOKE_OUTPUT` pointing to an empty evidence directory. It captures the app's GPU surface using egui screenshot events, not the unsupported eframe screenshot environment variable. Normal launches never capture or save screenshots.
+Found a problem? [Report it here](https://github.com/NobleSpartan6/burrow/issues/new/choose).
+Please remove personal paths and private information from screenshots and logs.

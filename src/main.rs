@@ -13,13 +13,14 @@ fn main() -> std::process::ExitCode {
         return std::process::ExitCode::SUCCESS;
     }
     let smoke = args == ["--smoke-test"];
-    if !args.is_empty() && !smoke {
-        eprintln!("Usage: burrow [--version | --smoke-test]");
+    let interaction = args == ["--interaction-test"];
+    if !args.is_empty() && !smoke && !interaction {
+        eprintln!("Usage: burrow [--version | --smoke-test | --interaction-test]");
         return std::process::ExitCode::FAILURE;
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Burrow — Overview")
+            .with_title("Burrow — Clean")
             .with_inner_size([1060.0, 800.0])
             .with_min_inner_size([720.0, 560.0])
             .with_icon(icon()),
@@ -38,6 +39,10 @@ fn main() -> std::process::ExitCode {
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             if smoke && let Some(state) = &cc.wgpu_render_state {
                 println!("BURROW_RENDERER {:?}", state.adapter.get_info());
+            }
+            if interaction {
+                cc.egui_ctx
+                    .data_mut(|d| d.insert_temp(eframe::egui::Id::new("burrow-hitboxes"), true));
             }
             Ok(Box::new(ui::Burrow::new(cc, smoke)))
         }),

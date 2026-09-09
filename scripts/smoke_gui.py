@@ -15,7 +15,7 @@ def output(*args):
 
 
 with (artifacts / 'gui.log').open('w') as log:
-    process = subprocess.Popen([str(root / 'target/release/burrow')], stdout=log, stderr=log)
+    process = subprocess.Popen([str(root / 'target/release/burrow'), '--interaction-test'], stdout=log, stderr=log)
     try:
         window = None
         for _ in range(100):
@@ -30,26 +30,30 @@ with (artifacts / 'gui.log').open('w') as log:
         for width, height, size in [('1060', '800', 'desktop'), ('720', '560', 'compact')]:
             subprocess.check_call(['xdotool', 'windowsize', '--sync', window, width, height])
             time.sleep(0.5)
-            for key, title, name in [('1', 'Overview', '01-overview'), ('2', 'Clean up', '02-cleanup'), ('3', 'Disk explorer', '03-explorer'), ('4', 'About & help', '04-help')]:
+            for key, title, name in [('1', 'Clean', '01-cleanup'), ('2', 'Apps', '02-apps'), ('3', 'Optimize', '03-optimize'), ('4', 'Analyze', '04-explorer'), ('5', 'Status', '05-status'), ('6', 'About & help', '06-help')]:
                 subprocess.check_call(['xdotool', 'key', '--clearmodifiers', f'ctrl+{key}'])
                 for _ in range(50):
                     if title in output('xdotool', 'getwindowname', window): break
                     time.sleep(0.1)
                 else: raise AssertionError(f'Navigation did not activate {title} at {size}')
-                time.sleep(2.3 if title == "Overview" else 0.5)
+                time.sleep(2.3 if title == "Status" else 0.5)
                 subprocess.check_call(['scrot', '-u', str(artifacts / f'{name}-{size}.png')])
                 assert process.poll() is None, f'App crashed on {title}'
         subprocess.check_call(['xdotool', 'windowsize', '--sync', window, '1060', '800'])
         time.sleep(0.5)
-        for x, title in [(480, 'Clean up'), (606, 'Disk explorer'), (732, 'About & help'), (354, 'Overview')]:
-            subprocess.check_call(['xdotool', 'mousemove', '--window', window, str(x), '42', 'click', '1'])
+        for title in ['Clean', 'Apps', 'Optimize', 'Analyze', 'About & help', 'Status']:
+            # Coordinates are emitted by the actual controls, not guessed pixel positions.
+            matches = [line.split('\t') for line in (artifacts / 'gui.log').read_text(errors='replace').splitlines() if line.startswith(f'BURROW_HITBOX\t{title}\t')]
+            if not matches: raise AssertionError(f'No native hitbox for {title}')
+            _, _, x, y = matches[-1]
+            subprocess.check_call(['xdotool', 'mousemove', '--window', window, x, y, 'click', '1'])
             for _ in range(50):
                 if title in output('xdotool', 'getwindowname', window): break
                 time.sleep(0.1)
             else: raise AssertionError(f'Pointer navigation did not activate {title}')
         subprocess.check_call(['xdotool', 'key', '--clearmodifiers', 'ctrl+plus', 'ctrl+plus'])
         time.sleep(0.5)
-        subprocess.check_call(['scrot', '-u', str(artifacts / '05-overview-large-text.png')])
+        subprocess.check_call(['scrot', '-u', str(artifacts / '07-status-large-text.png')])
         assert process.poll() is None
         # Warm idle measurements from /proc; not a cross-platform benchmark.
         def sample():
@@ -60,7 +64,7 @@ with (artifacts / 'gui.log').open('w') as log:
         a, _ = sample(); start = time.monotonic(); time.sleep(5); b, rss = sample()
         cpu = (b-a) / os.sysconf('SC_CLK_TCK') / (time.monotonic()-start) * 100
         (artifacts / 'IDLE-METRICS.txt').write_text(f'Linux CI warm idle, 5s sample: {cpu:.2f}% of one CPU core; RSS {rss/1048576:.1f} MiB.\nNot a Mac/Windows hardware claim.\n')
-        (artifacts / 'SMOKE-TEST.txt').write_text('PASS: native launch; four-page keyboard and pointer navigation; 1060x800 and 720x560; text zoom. No cleanup performed.\n')
+        (artifacts / 'SMOKE-TEST.txt').write_text('PASS: native launch; six-page keyboard and pointer navigation; 1060x800 and 720x560; text zoom. No cleanup performed.\n')
     finally:
         process.terminate()
         try: process.wait(timeout=5)

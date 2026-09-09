@@ -163,8 +163,18 @@ pub fn record(response: &egui::Response, _name: &str) {
     response
         .ctx
         .data_mut(|data| data.insert_temp(egui::Id::new(_name), response.rect));
-    #[cfg(not(test))]
-    let _ = response;
+    if response.ctx.data(|d| {
+        d.get_temp::<bool>(egui::Id::new("burrow-hitboxes"))
+            .unwrap_or(false)
+    }) {
+        let id = egui::Id::new(("hitbox", _name));
+        let old = response.ctx.data(|d| d.get_temp::<egui::Rect>(id));
+        if old != Some(response.rect) {
+            response.ctx.data_mut(|d| d.insert_temp(id, response.rect));
+            let point = response.rect.center();
+            println!("BURROW_HITBOX\t{}\t{:.0}\t{:.0}", _name, point.x, point.y);
+        }
+    }
 }
 
 /// A static orbital emblem, not a metric or a rotating 3-D scene.

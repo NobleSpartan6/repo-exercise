@@ -1,9 +1,12 @@
+#[path = "workspaces.rs"]
+mod workspaces;
 use crate::design::{self, ACCENT, AMBER, BG, DANGER, LINE, MUTED, PANEL};
 use crate::monitor::{DriveSnapshot, Monitor, Snapshot};
 use burrow::{
     VERSION,
     metrics::{DiskCapacity, SpaceLevel, Usage, cpu_fraction},
 };
+use burrow::{command, maintenance, preferences::Preferences, software};
 use burrow::{
     engine::{self, Analysis, Candidate, Cleanup, Control, Preview},
     human_bytes, platform,
@@ -16,21 +19,26 @@ use std::sync::{
     mpsc::{self, Receiver, Sender},
 };
 use std::time::Duration;
+use workspaces::Workspaces;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
     Overview,
     Cleanup,
     Explorer,
+    Software,
+    Optimize,
     About,
 }
 impl Page {
     fn title(self) -> &'static str {
         match self {
-            Self::Overview => "Overview",
-            Self::Cleanup => "Clean up",
-            Self::Explorer => "Disk explorer",
+            Self::Overview => "Status",
+            Self::Cleanup => "Clean",
+            Self::Explorer => "Analyze",
             Self::About => "About & help",
+            Self::Software => "Apps",
+            Self::Optimize => "Optimize",
         }
     }
 }
@@ -39,16 +47,36 @@ enum Task {
     Preview(u32),
     Analyze(PathBuf),
     Clean(Vec<Candidate>),
+    Software,
+    Startup,
+    Updates,
+    MeasureSoftware(software::Application),
+    PlanRemoval(software::Application),
+    RemoveSoftware(software::RemovalPlan),
+    Maintain(Vec<maintenance::Action>),
+    OpenSettings(command::SettingsPage),
+    Reveal(PathBuf),
+    SavePreferences(Preferences),
 }
 enum Event {
     Preview(Preview),
     Analyzed(Analysis),
     Cleaned(Cleanup),
     Error(String),
+    Software(software::Inventory),
+    Startup(Vec<software::StartupItem>),
+    UpdateReport(String),
+    AppDetails(String),
+    AppPlan(software::RemovalPlan),
+    AppRemoved(String),
+    Maintenance(Vec<maintenance::Record>),
+    Notice(String),
+    PreferencesSaved,
 }
 
 pub struct Burrow {
     page: Page,
+    workspace: Workspaces,
     monitor: Option<Monitor>,
     sample: Snapshot,
     drive_sample: DriveSnapshot,
@@ -80,13 +108,24 @@ impl Burrow {
     fn with_context(ctx: &egui::Context, monitoring: bool, smoke: bool) -> Self {
         design::configure(ctx);
         let (tx, rx) = mpsc::channel();
-        let (monitor, message) = match monitoring.then(|| Monitor::start(ctx.clone())) {
+        let (monitor, mut message) = match monitoring.then(|| Monitor::start(ctx.clone())) {
             Some(Ok(m)) => (Some(m), String::new()),
             Some(Err(e)) => (None, format!("System monitor unavailable: {e}")),
             None => (None, String::new()),
         };
+        let mut workspace = Workspaces::default();
+        if monitoring && !smoke {
+            match Preferences::load() {
+                Ok(p) => workspace.preferences = p,
+                Err(e) => {
+                    workspace.preferences_error = Some(e.clone());
+                    message = e;
+                }
+            }
+        }
         Self {
-            page: Page::Overview,
+            page: Page::Cleanup,
+            workspace,
             monitor,
             sample: Snapshot::default(),
             drive_sample: DriveSnapshot::default(),
@@ -114,7 +153,9 @@ impl Burrow {
     fn navigate(&mut self, page: Page, ctx: &egui::Context) {
         self.page = page;
         if let Some(monitor) = &self.monitor {
-            monitor.set_overview_visible(page == Page::Overview);
+            monitor.set_overview_visible(
+                page == Page::Overview || self.workspace.mini.load(Ordering::Relaxed),
+            );
         }
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!(
             "Burrow — {}",
@@ -125,12 +166,29 @@ impl Burrow {
         if self.busy.is_some() {
             return;
         }
+        if matches!(&task, Task::Preview(_) | Task::Clean(_))
+            && self.workspace.preferences_error.is_some()
+        {
+            self.message =
+                "Cleanup is paused. Review the saved-settings error before scanning.".into();
+            return;
+        }
         self.message.clear();
         self.control = Control::default();
         self.busy = Some(match &task {
             Task::Preview(_) => "Scanning known caches",
             Task::Analyze(_) => "Reading folder sizes",
             Task::Clean(_) => "Moving selected files to Trash",
+            Task::Software => "Reading installed apps",
+            Task::Startup => "Reading startup registrations",
+            Task::Updates => "Checking update sources",
+            Task::MeasureSoftware(_) => "Measuring app files",
+            Task::PlanRemoval(_) => "Preparing an app removal review",
+            Task::RemoveSoftware(_) => "Moving an app to Trash",
+            Task::Maintain(_) => "Running reviewed maintenance",
+            Task::OpenSettings(_) => "Opening the system tool",
+            Task::Reveal(_) => "Opening the containing folder",
+            Task::SavePreferences(_) => "Saving your preferences",
         });
         if matches!(&task, Task::Preview(_)) {
             self.preview = None;
@@ -141,6 +199,11 @@ impl Burrow {
         if matches!(&task, Task::Analyze(_)) {
             self.analysis = None;
         }
+        if matches!(&task, Task::Software) {
+            self.workspace.app_selected = None;
+            self.workspace.app_details.clear();
+        }
+        let preferences = self.workspace.preferences.clone();
         let control = self.control.clone();
         let tx = self.tx.clone();
         let repaint = ctx.clone();
@@ -149,14 +212,28 @@ impl Burrow {
             .spawn(move || {
                 let event = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match task {
                     Task::Preview(days) => {
-                        engine::preview(&platform::cache_roots(), days, &control)
-                            .map(Event::Preview)
+                        let roots=platform::cache_roots().into_iter().filter(|r|!preferences.disabled_caches.contains(&r.label)).collect::<Vec<_>>();
+                        engine::preview(&roots, days, &control)
+                            .map(|mut p| { let before=p.files.len(); p.files.retain(|f|!preferences.excludes(&f.path)); p.skipped+=(before-p.files.len())as u64; Event::Preview(p) })
                             .unwrap_or_else(Event::Error)
                     }
                     Task::Analyze(path) => engine::analyze(&path, &control)
                         .map(Event::Analyzed)
                         .unwrap_or_else(Event::Error),
                     Task::Clean(files) => Event::Cleaned(engine::clean_selected(&files, &control)),
+                    Task::Software => software::inventory(&control).map(Event::Software).unwrap_or_else(Event::Error),
+                    Task::Startup => software::startup(&control).map(Event::Startup).unwrap_or_else(Event::Error),
+                    Task::Updates => software::check_updates(&control).map(Event::UpdateReport).unwrap_or_else(Event::Error),
+                    Task::MeasureSoftware(app) => app.path.as_ref().ok_or_else(||"App location unknown".into()).and_then(|p|engine::analyze(p,&control)).map(|r|{
+                        let related=software::related_paths(&app).into_iter().map(|p|p.display().to_string()).collect::<Vec<_>>().join("\n");
+                        Event::AppDetails(format!("{}: {} across {} readable files. {} {} excluded/unreadable.\n{}",app.name,human_bytes(r.total_bytes),r.files,if r.partial{"Partial scan."}else{""},r.skipped,if related.is_empty(){"No matching related-data paths found.".into()}else{format!("Related paths to inspect (not selected for removal):\n{related}")}))
+                    }).unwrap_or_else(Event::Error),
+                    Task::PlanRemoval(app) => software::plan_removal(&app,&control).map(Event::AppPlan).unwrap_or_else(Event::Error),
+                    Task::RemoveSoftware(plan) => software::remove_app(&plan,&control).map(Event::AppRemoved).unwrap_or_else(Event::Error),
+                    Task::Maintain(actions) => Event::Maintenance(maintenance::perform(&actions,&control)),
+                    Task::OpenSettings(page) => command::open_settings(page,&control).map(Event::Notice).unwrap_or_else(Event::Error),
+                    Task::Reveal(path) => command::reveal(&path,&control).map(Event::Notice).unwrap_or_else(Event::Error),
+                    Task::SavePreferences(p) => p.save().map(|()|Event::PreferencesSaved).unwrap_or_else(Event::Error),
                 }))
                 .unwrap_or_else(|_| {
                     Event::Error(
@@ -168,6 +245,9 @@ impl Burrow {
                 repaint.request_repaint();
             });
         if let Err(error) = spawned {
+            if self.busy == Some("Saving your preferences") {
+                self.workspace.preferences_error = Some(error.to_string());
+            }
             self.busy = None;
             self.message = format!("Could not start the task: {error}");
         }
@@ -175,13 +255,32 @@ impl Burrow {
     fn receive(&mut self) {
         if let Some(monitor) = &self.monitor {
             if let Some(sample) = monitor.system.take() {
+                if sample.ready
+                    && let (Some(cpu), Some(mem)) = (
+                        cpu_fraction(sample.cpu),
+                        Usage::new(sample.used_memory, sample.total_memory),
+                    )
+                {
+                    self.workspace.history.push_back((cpu, mem.fraction()));
+                    while self.workspace.history.len() > 60 {
+                        self.workspace.history.pop_front();
+                    }
+                }
                 self.sample = sample;
             }
             if let Some(sample) = monitor.drives.take() {
                 self.drive_sample = sample;
             }
+            if let Some(sample) = monitor.details.take() {
+                self.workspace.details = sample;
+                self.workspace.refilter_processes();
+            }
+            if let Some(sample) = monitor.power.take() {
+                self.workspace.power = sample;
+            }
         }
         while let Ok(event) = self.rx.try_recv() {
+            let was_saving = self.busy == Some("Saving your preferences");
             self.busy = None;
             match event {
                 Event::Preview(result) => {
@@ -211,7 +310,37 @@ impl Burrow {
                     self.selected.clear();
                     self.selected_bytes = 0;
                 }
-                Event::Error(error) => self.message = error,
+                Event::Error(error) => {
+                    if was_saving {
+                        self.workspace.preferences_error = Some(error.clone());
+                    }
+                    self.message = error;
+                }
+                Event::Notice(message) => self.message = message,
+                Event::PreferencesSaved => {
+                    self.workspace.preferences_error = None;
+                    self.message =
+                        "Saved your cache choices and protected folders on this computer.".into();
+                }
+                Event::Software(inventory) => {
+                    self.workspace.apps = Some(inventory);
+                    self.workspace.refilter_apps();
+                }
+                Event::Startup(items) => self.workspace.startup = Some(items),
+                Event::UpdateReport(report) => self.workspace.update_report = report,
+                Event::AppDetails(report) => self.workspace.app_details = report,
+                Event::AppPlan(plan) => {
+                    self.workspace.app_plan = Some(plan);
+                    self.workspace.app_ack = false;
+                }
+                Event::AppRemoved(message) => {
+                    self.message = message;
+                    self.workspace.apps = None;
+                    self.workspace.app_selected = None;
+                    self.workspace.app_rows.clear();
+                    self.workspace.app_details.clear();
+                }
+                Event::Maintenance(report) => self.workspace.maintenance_report = report,
             }
         }
     }
@@ -233,74 +362,6 @@ impl Burrow {
                     .collect()
             })
             .unwrap_or_default();
-    }
-    fn overview(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        egui::ScrollArea::vertical().id_salt("overview").auto_shrink([false, false]).show(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(4.0); design::orbit(ui, 52.0); ui.add_space(8.0);
-                design::title(ui, "Room to breathe.", 34.0);
-                design::muted(ui, "Less clutter. A clearer view of your computer.");
-                ui.add_space(9.0);
-                centered_actions(ui, 334.0, |ui| {
-                    if primary(ui, "Review old caches", self.busy.is_none()).clicked() { self.navigate(Page::Cleanup, ctx); }
-                    if secondary(ui, "Find large files", true).clicked() { self.navigate(Page::Explorer, ctx); }
-                });
-                ui.add_space(6.0);
-                ui.label(RichText::new("Nothing is selected or removed automatically.").size(12.0).color(MUTED));
-            });
-            ui.add_space(18.0);
-            let cpu = self.sample.ready.then(|| cpu_fraction(self.sample.cpu)).flatten();
-            let memory = Usage::new(self.sample.used_memory, self.sample.total_memory);
-            let cpu_value = cpu.map(|n| format!("{:.0}%", n * 100.0)).unwrap_or_else(|| "—".into());
-            let memory_value = memory.map(|_| human_bytes(self.sample.used_memory)).unwrap_or_else(|| "—".into());
-            let memory_detail = memory.map(|n| format!("of {}  ·  {:.0}% used", human_bytes(self.sample.total_memory), n.percent())).unwrap_or_else(|| "Waiting for an OS reading".into());
-            if ui.available_width() >= 570.0 {
-                ui.columns(2, |cols| {
-                    design::metric(&mut cols[0], "CPU in use", &cpu_value, "Overall processor usage", cpu);
-                    design::metric(&mut cols[1], "Memory in use", &memory_value, &memory_detail, memory.map(Usage::fraction));
-                });
-            } else {
-                design::metric(ui, "CPU in use", &cpu_value, "Overall processor usage", cpu);
-                design::metric(ui, "Memory in use", &memory_value, &memory_detail, memory.map(Usage::fraction));
-            }
-            ui.add_space(22.0);
-            ui.horizontal(|ui| {
-                design::title(ui, "Your drives", 19.0);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { ui.label(RichText::new("Bars show used space").size(12.0).color(MUTED)); });
-            });
-            ui.add_space(4.0);
-            for disk in &self.drive_sample.disks {
-                design::card().inner_margin(12).show(ui, |ui| {
-                    ui.spacing_mut().interact_size.y = 20.0;
-                    ui.set_min_width((ui.available_width() - 1.0).max(0.0));
-                    ui.horizontal(|ui| {
-                        let name = if disk.name.is_empty() { &disk.mount } else { &disk.name };
-                        ui.add(egui::Label::new(RichText::new(name).font(design::heading(14.0))).truncate()).on_hover_text(name);
-                        if !disk.name.is_empty() { ui.add(egui::Label::new(RichText::new(&disk.mount).size(12.0).color(MUTED)).truncate()).on_hover_text(&disk.mount); }
-                    });
-                    if let Some(capacity) = DiskCapacity::new(disk.total, disk.available) {
-                        let (color, warning) = match capacity.space_level() {
-                            SpaceLevel::Normal => (ACCENT, None), SpaceLevel::Low => (AMBER, Some("Low free space")), SpaceLevel::VeryLow => (DANGER, Some("Very low free space")),
-                        };
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(RichText::new(format!("{} free of {}", human_bytes(disk.available), human_bytes(disk.total))).size(12.0).color(MUTED));
-                            ui.label(RichText::new(format!("{:.0}% used", capacity.used_percent())).size(12.0).color(color));
-                            if let Some(warning) = warning { ui.colored_label(color, warning); }
-                        });
-                        design::bar(ui, capacity.used_fraction(), color);
-                    } else { design::muted(ui, "Capacity unavailable — waiting for a usable OS reading."); }
-                });
-            }
-            if self.drive_sample.disks.is_empty() {
-                design::card().show(ui, |ui| design::muted(ui, if self.drive_sample.ready { "No readable drives reported by the operating system." }
-                    else { "Reading drive information… CPU and memory are sampled separately." }));
-            }
-            if let Some(at) = self.drive_sample.sampled_at && at.elapsed().as_secs() >= 30 {
-                ui.colored_label(AMBER, format!("Drive reading is {}s old. A volume may be slow to respond.", at.elapsed().as_secs()));
-            }
-            ui.add_space(6.0);
-            ui.label(RichText::new("CPU / memory: every 2s. Drives: every 10s. Volumes can share physical storage.").size(12.0).color(MUTED));
-        });
     }
     fn age_control(&mut self, ui: &mut egui::Ui) {
         let previous = self.days;
@@ -331,7 +392,7 @@ impl Burrow {
                     design::title(ui, "A scan is just a look.", 32.0);
                     design::muted(ui, "Review old caches. Keep what matters.");
                     ui.add_space(15.0); centered_actions(ui, 252.0, |ui| self.age_control(ui)); ui.add_space(5.0);
-                    if primary(ui, "Scan caches", self.busy.is_none()).clicked() { self.start(Task::Preview(self.days), ctx); }
+                    if primary(ui, "Scan caches", self.busy.is_none()&&self.workspace.preferences_error.is_none()).clicked() { self.start(Task::Preview(self.days), ctx); }
                     ui.add_space(10.0);
                     ui.label(RichText::new("Personal folders and system files are not included.").size(12.0).color(MUTED));
                 });
@@ -340,13 +401,7 @@ impl Burrow {
                     ui.set_min_width((ui.available_width()-1.0).max(0.0));
                     design::title(ui, "You choose what goes.", 16.0);
                     design::muted(ui, "Scan first, review the paths, then select individual files. A separate confirmation is always required.");
-                    egui::CollapsingHeader::new("Which caches are checked?").show(ui, |ui| {
-                        for root in platform::cache_roots() {
-                            ui.label(RichText::new(root.label).font(design::heading(13.0)));
-                            ui.add(egui::Label::new(RichText::new(root.path.to_string_lossy()).size(12.0).color(MUTED)).wrap());
-                        }
-                        if !cfg!(any(target_os="windows", target_os="macos")) { design::muted(ui, "This Linux QA build has no cleanup allowlist."); }
-                    });
+                    self.clean_preferences(ui,ctx);
                 });
                 self.last_report(ui);
             });
@@ -365,10 +420,17 @@ impl Burrow {
         );
         ui.horizontal_wrapped(|ui| {
             self.age_control(ui);
-            if secondary(ui, "Scan again", self.busy.is_none()).clicked() {
+            if secondary(
+                ui,
+                "Scan again",
+                self.busy.is_none() && self.workspace.preferences_error.is_none(),
+            )
+            .clicked()
+            {
                 self.start(Task::Preview(self.days), ctx);
             }
         });
+        self.clean_preferences(ui, ctx);
         let Some(preview) = &self.preview else {
             return;
         };
@@ -399,9 +461,9 @@ impl Burrow {
             design::title(ui, "Nothing eligible in the caches checked.", 22.0);
             design::muted(
                 ui,
-                "This is not a whole-computer scan. Disk explorer can inspect a folder of your choice.",
+                "This is not a whole-computer scan. Analyze can inspect a folder of your choice.",
             );
-            if secondary(ui, "Open disk explorer", true).clicked() {
+            if secondary(ui, "Open Analyze", true).clicked() {
                 self.navigate(Page::Explorer, ctx);
             }
             self.last_report(ui);
@@ -556,174 +618,27 @@ impl Burrow {
             self.folder = Some(folder);
         }
     }
-    fn explorer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        if self.analysis.is_none() {
-            egui::ScrollArea::vertical().id_salt("explorer-start").show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(26.0); design::orbit(ui, 118.0); ui.add_space(18.0);
-                    design::title(ui, "Find the big things first.", 32.0);
-                    design::muted(ui, "A clearer picture of where your space goes."); ui.add_space(20.0);
-                    centered_actions(ui, 320.0, |ui| {
-                        if secondary(ui, "Choose folder…", self.busy.is_none()).clicked() { self.choose_folder(); }
-                        if primary(ui, "Analyze folder", self.folder.is_some() && self.busy.is_none()).clicked() && let Some(folder) = &self.folder { self.start(Task::Analyze(folder.clone()), ctx); }
-                    });
-                    if let Some(folder) = &self.folder { ui.add(egui::Label::new(RichText::new(folder.to_string_lossy()).size(12.0).color(MUTED)).truncate()).on_hover_text(folder.display().to_string()); }
-                    ui.add_space(10.0);
-                    ui.label(RichText::new("Read-only. No delete controls on this screen.").size(12.0).color(ACCENT));
-                });
-                ui.add_space(30.0);
-                design::card().show(ui, |ui| {
-                    ui.set_min_width((ui.available_width()-1.0).max(0.0));
-                    design::title(ui, "Size, not contents.", 16.0);
-                    design::muted(ui, "Burrow reads file metadata and keeps only the largest 200 results. Your files stay exactly where they are.");
-                    ui.label(RichText::new("Links and cloud placeholders are excluded. Network drives may respond slowly.").size(12.0).color(MUTED));
-                });
-            });
-            return;
-        }
-        let height = (ui.available_height() - 220.0).clamp(140.0, 500.0);
-        egui::ScrollArea::vertical()
-            .id_salt("explorer-page")
-            .show(ui, |ui| self.explorer_results(ui, ctx, height));
-    }
-    fn explorer_results(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, height: f32) {
-        page_heading(
-            ui,
-            "Disk explorer",
-            "Largest files first. Inspect freely; this screen never deletes.",
-        );
-        ui.horizontal_wrapped(|ui| {
-            if secondary(ui, "Choose folder…", self.busy.is_none()).clicked() {
-                self.choose_folder();
-            }
-            if primary(
-                ui,
-                "Analyze again",
-                self.folder.is_some() && self.busy.is_none(),
-            )
-            .clicked()
-                && let Some(folder) = &self.folder
-            {
-                self.start(Task::Analyze(folder.clone()), ctx);
-            }
-        });
-        let Some(result) = &self.analysis else {
-            return;
-        };
-        ui.add_space(14.0);
-        design::title(
-            ui,
-            &format!(
-                "{} across {} files",
-                human_bytes(result.total_bytes),
-                result.files
-            ),
-            25.0,
-        );
-        ui.add(
-            egui::Label::new(RichText::new(result.root.to_string_lossy()).color(MUTED)).truncate(),
-        )
-        .on_hover_text(result.root.display().to_string());
-        ui.label(
-            RichText::new(format!(
-                "{:.2}s · {} excluded/unreadable · logical sizes, not allocated space",
-                result.elapsed.as_secs_f64(),
-                result.skipped
-            ))
-            .size(12.0)
-            .color(MUTED),
-        );
-        if result.partial {
-            ui.colored_label(
-                AMBER,
-                "Partial result — stopped or reached a limit. Totals cover visited files only.",
-            );
-        }
-        ui.add_space(5.0);
-        ui.separator();
-        if result.top.is_empty() {
-            design::muted(ui, "No readable files found in the selected folder.");
-        }
-        egui::ScrollArea::vertical()
-            .id_salt("largest-files")
-            .auto_shrink([false, false])
-            .max_height(height)
-            .show_rows(ui, 55.0, result.top.len(), |ui, range| {
-                for i in range {
-                    let file = &result.top[i];
-                    ui.horizontal(|ui| {
-                        ui.set_height(55.0);
-                        ui.add_sized(
-                            [29.0, 36.0],
-                            egui::Label::new(
-                                RichText::new(format!("{:02}", i + 1))
-                                    .size(12.0)
-                                    .color(MUTED),
-                            ),
-                        );
-                        let width = (ui.available_width() - 210.0).max(40.0);
-                        ui.allocate_ui(egui::vec2(width, 48.0), |ui| {
-                            ui.spacing_mut().item_spacing.y = 2.0;
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(
-                                        file.path.file_name().unwrap_or_default().to_string_lossy(),
-                                    )
-                                    .font(design::heading(13.0)),
-                                )
-                                .truncate(),
-                            );
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(file.path.to_string_lossy())
-                                        .size(11.0)
-                                        .color(MUTED),
-                                )
-                                .truncate(),
-                            )
-                            .on_hover_text(file.path.display().to_string());
-                        });
-                        ui.add_sized(
-                            [84.0, 36.0],
-                            egui::Label::new(
-                                RichText::new(human_bytes(file.bytes))
-                                    .color(ACCENT)
-                                    .size(13.0),
-                            ),
-                        );
-                        if secondary(ui, "Copy path", true).clicked() {
-                            ctx.copy_text(file.path.to_string_lossy().into_owned());
-                        }
-                    });
-                }
-            });
-    }
     fn about(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical().id_salt("about").show(ui, |ui| {
-            page_heading(ui, "Small app. Clear boundaries.", &format!("Burrow {VERSION} · Preview · Free and open source (MIT)"));
-            design::card().show(ui, |ui| {
-                ui.set_min_width((ui.available_width()-1.0).max(0.0));
-                design::title(ui, "Native. Local. Deliberate.", 20.0);
-                design::muted(ui, "Rust and a GPU-rendered interface. No Electron, browser runtime, account, ads, telemetry, or background service after quitting.");
-                ui.add_space(8.0);
-                ui.label("Review allowlisted caches, inspect large files, and see CPU, memory and drive usage. No app uninstaller, registry changes, system cleanup, or promised speed boost.");
+        egui::ScrollArea::vertical().id_salt("about").show(ui,|ui|{
+            page_heading(ui,"Burrow",&format!("Burrow {VERSION} · Preview · Free and open source"));
+            design::title(ui,"Five tools. You stay in control.",22.0);
+            ui.label("Clean: review old caches. Apps: inspect software and startup registrations. Optimize: run reviewed maintenance. Analyze: explore folder sizes. Status: view live readings.");
+            ui.add_space(12.0);design::title(ui,"Before you remove anything",18.0);
+            ui.label("Keep backups and close affected apps. Trash is not a backup. Moving files does not free disk space until you empty Trash yourself. Burrow never empties it.");
+            ui.label("Mac app removal moves only the reviewed app bundle. Windows uninstall and startup changes stay in system settings. Some advanced Mole features are not implemented; the feature guide lists them plainly.");
+            ui.add_space(12.0);design::title(ui,"Privacy and performance",18.0);
+            ui.label("A native Rust app, not a browser. Scans and readings stay on your computer. App-update checks use the internet only after you allow and start them. No accounts, ads or telemetry.");
+            ui.label("Cache choices and protected-folder paths are saved locally. Inventories and session logs are not saved automatically. The mini monitor closes when you quit Burrow.");
+            ui.add_space(12.0);design::title(ui,"Keyboard shortcuts",18.0);
+            ui.label("Ctrl / Command + 1–5: Clean, Apps, Optimize, Analyze, Status. + 6: Help. Tab and Space: controls. Escape: close a review or request Stop. Plus/minus: text size.");
+            ui.add_space(10.0);ui.horizontal_wrapped(|ui|{
+                ui.hyperlink_to("Downloads","https://github.com/NobleSpartan6/burrow/releases");
+                ui.hyperlink_to("Install guide","https://github.com/NobleSpartan6/burrow/blob/main/docs/INSTALL.md");
+                ui.hyperlink_to("Feature guide","https://github.com/NobleSpartan6/burrow/blob/main/docs/FEATURES.md");
+                ui.hyperlink_to("Report a problem","https://github.com/NobleSpartan6/burrow/issues/new/choose");
             });
-            ui.add_space(15.0); design::title(ui, "Before moving files", 18.0);
-            design::muted(ui, "Close affected apps and keep a backup. Caches may be needed offline; rebuilding them can temporarily slow apps down. Never run Burrow as administrator or with sudo.");
-            design::muted(ui, "Trash is not a backup and does not immediately free disk space. Burrow never empties it. Inspect Trash after an error before retrying. Stopping does not undo completed moves.");
-            ui.add_space(10.0); design::title(ui, "Make yourself comfortable", 18.0);
-            design::muted(ui, "Ctrl / Command + 1–4 switches pages. Tab and Space navigate controls. Escape closes a confirmation or requests cancellation. Ctrl / Command + plus or minus changes text scale.");
-            ui.add_space(10.0);
-            ui.horizontal_wrapped(|ui| {
-                ui.hyperlink_to("Download a newer release", "https://github.com/NobleSpartan6/burrow/releases");
-                ui.hyperlink_to("Installation guide", "https://github.com/NobleSpartan6/burrow/blob/main/docs/INSTALL.md");
-                ui.hyperlink_to("Source & report an issue", "https://github.com/NobleSpartan6/burrow");
-            });
-            design::muted(ui, "To update, quit Burrow and run the newer Windows installer or replace the Mac app. Copy any session log before quitting; paths and history are not saved.");
-            ui.add_space(10.0);
-            ui.label(RichText::new("Only the links above open your browser. No automatic updates or update checks. Independent project inspired by Mole; not affiliated with its authors.").size(12.0).color(MUTED));
-            ui.add_space(6.0);
-            ui.colored_label(AMBER, "Preview builds are unsigned on Windows and not notarized on Mac. Do not disable system protections.");
+            ui.add_space(8.0);design::muted(ui,"Independent project inspired by Mole. MIT licensed. Not affiliated with Mole's authors.");
+            ui.colored_label(AMBER,"Preview: unsigned on Windows, not notarized on Mac. Do not disable security protections.");
         });
     }
     fn confirmation(&mut self, ctx: &egui::Context) {
@@ -765,76 +680,105 @@ impl Burrow {
         egui::TopBottomPanel::top("navigation")
             .frame(egui::Frame::new().fill(BG).inner_margin(16))
             .show(ctx, |ui| {
-                ui.add_enabled_ui(!self.confirm && !self.show_log, |ui| {
-                    let compact = ui.available_width() < 690.0;
-                    let width = if compact { 65.0 } else { 123.0 };
-                    let nav_width = width * 4.0 + 24.0;
+                ui.add_enabled_ui(!self.modal_open(), |ui| {
+                    let width = ((ui.available_width() - 76.0) / 5.0).clamp(54.0, 100.0);
+                    let nav_width = width * 5.0 + 22.0;
+                    let pad = ((ui.available_width() - nav_width - 44.0) * 0.5).max(0.0);
                     ui.horizontal(|ui| {
                         ui.set_height(46.0);
-                        if ui.available_width() > 790.0 {
-                            ui.label(
-                                RichText::new("burrow")
-                                    .font(design::heading(21.0))
-                                    .color(ACCENT),
-                            );
-                        }
-                        let pad = ((ui.available_width() - nav_width) * 0.5 - 34.0).max(0.0);
                         ui.add_space(pad);
                         egui::Frame::new()
                             .fill(PANEL)
-                            .corner_radius(16)
+                            .corner_radius(20)
                             .stroke(egui::Stroke::new(1.0, LINE))
                             .inner_margin(5)
                             .show(ui, |ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
-                                ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
+                                ui.spacing_mut().button_padding = egui::vec2(6.0, 8.0);
                                 ui.horizontal(|ui| {
-                                    for (page, short) in [
-                                        (Page::Overview, "Home"),
-                                        (Page::Cleanup, "Clean"),
-                                        (Page::Explorer, "Files"),
-                                        (Page::About, "Help"),
+                                    for page in [
+                                        Page::Cleanup,
+                                        Page::Software,
+                                        Page::Optimize,
+                                        Page::Explorer,
+                                        Page::Overview,
                                     ] {
                                         let selected = page == self.page;
-                                        let text = if compact { short } else { page.title() };
-                                        let response = ui.add_sized(
+                                        let r = ui.add_sized(
                                             [width, 34.0],
                                             egui::Button::new(
-                                                RichText::new(text)
-                                                    .size(if compact { 12.0 } else { 13.0 })
-                                                    .color(if selected {
+                                                RichText::new(page.title()).size(13.0).color(
+                                                    if selected {
                                                         design::ACCENT_INK
                                                     } else {
                                                         MUTED
-                                                    }),
+                                                    },
+                                                ),
                                             )
                                             .fill(if selected { ACCENT } else { PANEL })
-                                            .corner_radius(11)
+                                            .corner_radius(17)
                                             .stroke(egui::Stroke::NONE),
                                         );
-                                        let response = response.on_hover_text(page.title());
-                                        design::record(&response, page.title());
-                                        if response.clicked() {
+                                        design::record(&r, page.title());
+                                        if r.clicked() {
                                             self.navigate(page, ctx);
                                         }
                                     }
                                 });
                             });
+                        let help = ui
+                            .add_sized([30.0, 32.0], egui::Button::new("?"))
+                            .on_hover_text("About & help");
+                        design::record(&help, "About & help");
+                        if help.clicked() {
+                            self.navigate(Page::About, ctx);
+                        }
                     });
                 });
             });
+    }
+    fn modal_open(&self) -> bool {
+        self.confirm
+            || self.show_log
+            || self.workspace.app_plan.is_some()
+            || self.workspace.maintenance_confirm
+            || self.workspace.reset_preferences
     }
     fn draw(&mut self, ctx: &egui::Context) {
         if let Some(mut smoke) = self.smoke.take() {
             if let Some(page) = smoke.step(ctx) {
                 self.navigate(
-                    [Page::Overview, Page::Cleanup, Page::Explorer, Page::About][page],
+                    [
+                        Page::Cleanup,
+                        Page::Software,
+                        Page::Optimize,
+                        Page::Explorer,
+                        Page::Overview,
+                        Page::About,
+                    ][page],
                     ctx,
                 );
             }
             self.smoke = Some(smoke);
         }
         self.receive();
+        if let Some(session) = &self.workspace.awake
+            && session.finished()
+        {
+            self.message = session
+                .error
+                .take()
+                .map(|e| format!("Screen-on session failed: {e}"))
+                .unwrap_or_else(|| {
+                    "Screen-on session finished. Normal power settings are active.".into()
+                });
+            self.workspace.awake = None;
+        }
+        if let Some(m) = &self.monitor {
+            m.set_overview_visible(
+                self.page == Page::Overview || self.workspace.mini.load(Ordering::Relaxed),
+            );
+        }
         if self.busy.is_some() {
             ctx.request_repaint_after(Duration::from_millis(150));
             if ctx.input(|i| i.viewport().close_requested()) {
@@ -843,12 +787,14 @@ impl Burrow {
                 self.message = "Stopping the task. Close again after it finishes; completed moves are not undone.".into();
             }
         }
-        if !self.confirm && !self.show_log {
+        if !self.modal_open() {
             for (key, page) in [
-                (egui::Key::Num1, Page::Overview),
-                (egui::Key::Num2, Page::Cleanup),
-                (egui::Key::Num3, Page::Explorer),
-                (egui::Key::Num4, Page::About),
+                (egui::Key::Num1, Page::Cleanup),
+                (egui::Key::Num2, Page::Software),
+                (egui::Key::Num3, Page::Optimize),
+                (egui::Key::Num4, Page::Explorer),
+                (egui::Key::Num5, Page::Overview),
+                (egui::Key::Num6, Page::About),
             ] {
                 if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, key)) {
                     self.navigate(page, ctx);
@@ -856,7 +802,14 @@ impl Burrow {
             }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.confirm {
+            if self.workspace.app_plan.is_some() {
+                self.workspace.app_plan = None;
+                self.workspace.app_ack = false;
+            } else if self.workspace.reset_preferences {
+                self.workspace.reset_preferences = false;
+            } else if self.workspace.maintenance_confirm {
+                self.workspace.maintenance_confirm = false;
+            } else if self.confirm {
                 self.confirm = false;
             } else if self.show_log {
                 self.show_log = false;
@@ -889,7 +842,7 @@ impl Burrow {
                         });
                     } else {
                         ui.label(
-                            RichText::new("Local-only · No automatic cleanup")
+                            RichText::new("Your files stay local · No automatic cleanup")
                                 .size(11.0)
                                 .color(MUTED),
                         );
@@ -924,7 +877,7 @@ impl Burrow {
                         egui::vec2(width, ui.available_height()),
                         egui::Layout::top_down(egui::Align::LEFT),
                         |ui| {
-                            ui.add_enabled_ui(!self.confirm && !self.show_log, |ui| {
+                            ui.add_enabled_ui(!self.modal_open(), |ui| {
                                 if !self.message.is_empty() {
                                     design::card().inner_margin(12).show(ui, |ui| {
                                         ui.horizontal_wrapped(|ui| {
@@ -938,9 +891,11 @@ impl Burrow {
                                 ui.add_enabled_ui(
                                     self.busy != Some("Moving selected files to Trash"),
                                     |ui| match self.page {
-                                        Page::Overview => self.overview(ui, ctx),
+                                        Page::Overview => self.status_workspace(ui, ctx),
+                                        Page::Software => self.software_workspace(ui, ctx),
+                                        Page::Optimize => self.optimize_workspace(ui, ctx),
                                         Page::Cleanup => self.cleanup(ui, ctx),
-                                        Page::Explorer => self.explorer(ui, ctx),
+                                        Page::Explorer => self.analyze_workspace(ui, ctx),
                                         Page::About => self.about(ui),
                                     },
                                 );
@@ -950,6 +905,8 @@ impl Burrow {
                 });
             });
         self.confirmation(ctx);
+        self.workspace_confirmations(ctx);
+        self.mini_monitor(ctx);
         if self.show_log {
             egui::Window::new("Cleanup session log").open(&mut self.show_log).default_size([680.0,400.0]).max_width((ctx.content_rect().width()-40.0).max(240.0)).show(ctx, |ui| {
                 if let Some(report) = &self.report {

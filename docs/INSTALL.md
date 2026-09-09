@@ -1,93 +1,84 @@
-# Install or update Burrow 0.2.0 — no coding required
+# Install or update Burrow
 
-Burrow is free. You do not need an account, a payment card, Terminal, PowerShell, Homebrew, Python or Rust to install a prebuilt release.
+You do not need a terminal or a GitHub account.
 
-**This is preview software.** Windows downloads are unsigned. Mac downloads are ad-hoc signed but not notarized. Automated checks are not a guarantee of flawless operation or an independent security audit. Keep backups and start with read-only Disk explorer.
+## 1. Download the right file
 
-## Download the right installer
+Open [Burrow releases](https://github.com/NobleSpartan6/burrow/releases) and choose
+the newest published preview. Open **Assets** if the downloads are hidden.
 
-Open [Burrow releases](https://github.com/NobleSpartan6/burrow/releases), choose the newest 0.2.0 preview and expand **Assets**.
+| Your computer | Choose |
+| --- | --- |
+| Mac, Apple M-series chip | `macOS-AppleSilicon.dmg` |
+| Mac, Intel processor | `macOS-Intel.dmg` |
+| Windows, Intel or AMD 64-bit processor | `Windows-x64-Setup.exe` |
 
-| Your computer | File to download |
-|---|---|
-| Windows with an Intel/AMD 64-bit processor | `Burrow-0.2.0-Windows-x64-Setup.exe` |
-| Mac with an Apple M-series chip | `Burrow-0.2.0-macOS-AppleSilicon.dmg` |
-| Mac with an Intel processor | `Burrow-0.2.0-macOS-Intel.dmg` |
+On a Mac, **Apple menu → About This Mac** shows the chip or processor.
+The Source code ZIP and `source.zip` are for developers, not installation.
 
-On Mac, **Apple menu → About This Mac** shows Chip or Processor. On Windows, **Settings → System → About → System type** shows the processor type. This is not a native Windows ARM64 or 32-bit build. **Source code ZIPs are not installers.**
+Burrow targets macOS 12 or later with Metal graphics, and Windows 10/11 x64
+with DirectX 12 graphics. Windows ARM and 32-bit systems are not tested targets.
+Hosted build checks do not cover every OS version, graphics driver, or device.
 
-Mac packages target macOS 12 or newer. Windows 11 x64 is the intended desktop target; Windows 10 22H2 compatibility is intended but not separately certified. The linked release build records the actual hosted-runner versions tested, not every supported OS or physical device.
+## 2. Install
 
-## Windows: install or update
+**Mac:** open the DMG, drag Burrow into Applications, then open Burrow from
+Applications. Eject the disk image afterward.
 
-1. Close Burrow normally after active work finishes. Copy any cleanup session log you need before quitting; it is not saved automatically.
-2. Open the downloaded **Setup.exe** under your normal Windows account. Keep the existing installation location when updating.
-3. Choose **Install**, then **Finish**, and open **Burrow** from Start.
-4. Check **About & help** or the footer for **0.2.0**.
+**Windows:** open the Setup EXE and choose Install, then Finish. Open Burrow from
+the Start menu. Use your normal Windows account; administrator mode is not needed.
+The portable ZIP is an alternative: extract it completely and open `burrow.exe`.
 
-No uninstall or administrator mode is needed. The installer uses your own user account's Programs folder; do not choose **Run as administrator**. The optional desktop shortcut is off by default.
+## Security warnings
 
-The separate portable ZIP is optional: choose **Extract All**, then open `burrow.exe` in the extracted folder, not inside the ZIP preview. Update portable copies by extracting the newer ZIP separately. The normal installer does not update a portable copy.
+These previews do not have verified publisher signing. Mac builds are ad-hoc
+signed but not notarized; Windows builds are unsigned. Your computer may refuse
+to open them. This is not proof that a file is safe or unsafe.
 
-## Mac: install or update
+Only use the downloads from this repository. Follow your organization's device
+policy. Do not disable Gatekeeper, SmartScreen, antivirus, or other protections,
+and do not run a command that strips quarantine or bypasses a warning. A managed
+computer may need approval from its administrator. Waiting for a signed release
+is a valid choice.
 
-1. Quit Burrow normally after active work finishes. Copy any cleanup session log you need first.
-2. Open the downloaded **DMG** and drag **Burrow** onto **Applications**. Choose **Replace** when updating an existing copy.
-3. Open Burrow from your **Applications** folder, then eject the disk image in Finder.
-4. Check **About & help** or the footer for **0.2.0**.
+Technical users can compare a download with the release's `SHA256SUMS.txt`.
+Checksums detect a different or damaged download; they do not replace publisher
+verification or a security review.
 
-Do not keep running from the disk image or use `sudo`. Copying into a shared Applications folder may require normal installation permission. A personal Applications folder is an alternative on restricted machines.
+## 3. Try a read-only scan first
 
-## Understand security warnings
+Open **Analyze**, choose a small local folder, and click **Analyze folder**.
+Click a rectangle to look inside a subfolder. This workspace never deletes files.
+See [First steps](TRY_BURROW.md) before using Clean or app removal.
 
-**Mac:** this preview has no trusted Developer ID signature or notarization. Ad-hoc signing checks bundle integrity locally; it does not identify a trusted publisher. Verify the exact download came from **NobleSpartan6/burrow** on GitHub before proceeding. After an attempted launch, macOS may offer **System Settings → Privacy & Security → Open Anyway** for this app. Use that per-app choice only when you trust the download and accept the preview risk.
+## Update an existing installation
 
-**Windows:** this preview has no Authenticode publisher signature. A SmartScreen reputation warning may offer **More info → Run anyway**. Use that per-file choice only when you trust this exact download and accept the unsigned-preview risk. A warning is not evidence that a file is safe.
+Wait for active work to finish. Copy any session log you need, then quit Burrow.
 
-**Do not disable Gatekeeper, Defender, SmartScreen, Smart App Control, antivirus or organizational policies. Do not remove quarantine attributes using Terminal.** Stop if a warning reports malware, says the app will damage your computer, or says it is damaged. On managed computers, ask your IT administrator. Choosing not to run unsigned software is reasonable.
+**Windows:** run the newer installer under the same account and keep the same
+installation folder. There is no need to uninstall first.
 
-Official explanations: [Apple](https://support.apple.com/102445) and [Microsoft](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+**Mac:** open the newer DMG, drag Burrow into Applications, and choose Replace.
 
-`SHA256SUMS.txt` is included for a technical helper to check download integrity. A matching checksum does not establish a trusted publisher or prove that software is free of defects or malware.
+Open **? → About & help** and check the version. Portable Windows copies must be
+updated separately; extracting a new ZIP does not replace an older shortcut.
 
-## First use: look without deleting
+## Something did not work
 
-Open **Disk explorer**, choose a local folder and click **Analyze folder**. This screen finds the largest 200 files encountered and cannot delete anything. **Copy path** copies a file's location.
+A startup error may mean your graphics driver or desktop session could not open
+a native window. Try a local desktop session and the graphics updates provided
+by your computer manufacturer. Do not change security settings to work around it.
 
-Reported sizes are logical lengths, not guaranteed physical disk usage. Shared, sparse, compressed or hard-linked files can differ. **Partial** means only the scanned portion is represented; links, cloud placeholders or unreadable folders may be omitted. **Cancel** stops a long scan, but a network filesystem call may take time to return.
+An unavailable reading is not a zero reading. Some computers do not expose battery
+or temperature information. App update checks need an already configured WinGet
+or Homebrew installation; otherwise use the app's own updater or your app store.
 
-## Review old caches carefully
+[Report a problem](https://github.com/NobleSpartan6/burrow/issues/new/choose) with the
+Burrow version, OS, and what happened. Remove personal paths and private details.
 
-Open **Clean up**, choose **7**, **30** or **90 days**, then **Scan caches**. Scanning removes nothing and nothing is preselected. Review the paths and select only files you recognize. **Select visible** selects filtered rows; **Clear selection** also clears hidden selections.
+## Remove Burrow
 
-Close the apps whose caches you selected, then choose **Review & move to Trash**. Review the full selection, including hidden rows, acknowledge that the apps are closed and confirm. Caches may be needed offline; rebuilding them can temporarily slow apps or require connectivity.
-
-Burrow rechecks files before requesting a move. Changed, missing, linked, out-of-scope or inaccessible files are refused. Its own code does not retry failed Trash operations using permanent deletion. Read the result and use **Session log → Copy full report** to preserve original paths and outcomes before quitting. Inspect Trash after an error because an OS operation's outcome can be uncertain.
-
-**Cancel stops future work; it does not undo completed moves.** A close request during a job requests cancellation and waits for the operation to stop. Do not grant extra privileges merely to increase the cleanup number.
-
-## Recovery and disk space
-
-Moving files to **Trash / Recycle Bin does not immediately free disk space**. Burrow never empties Trash. Keep backups; Trash is not a backup.
-
-On Windows, open Recycle Bin and choose **Restore** for the file when available. On Mac, use **Put Back** when available or move the file back using the original path from your session log. Recovery depends on the OS, volume and policy; it is not guaranteed for every configuration. Leave files in Trash while checking your apps. Manually emptying Trash later permanently deletes its contents and is your decision.
-
-## Read the Overview
-
-Memory shows used, total and percentage used, not a diagnosis of memory pressure. Drive bars show **used space**, with free space labeled separately. Warnings begin at 10% available or less and become **Very low free space** at 5% or less; they never trigger cleanup. Unusable readings are labeled unavailable rather than shown as full drives. Virtual volumes can report shared storage or quotas.
-
-Scroll to reach additional drives. CPU/RAM sampling is independent of drive queries; drive readings at least 30 seconds old are labeled. Use **Ctrl / Command + 1–4** to change pages and **Ctrl / Command + plus or minus** to adjust text scale.
-
-## Troubleshooting and uninstalling
-
-**No eligible files:** no old files were found in the narrow cache allowlist. That is not a whole-computer diagnosis. Try Disk explorer; do not grant full-disk access merely to find more caches.
-
-**Permission denied:** skip the item. Never run elevated or turn off protections to bypass a restriction.
-
-**Blank window or graphics error:** Mac uses Metal; Windows uses DirectX 12. Try a local desktop session and your manufacturer's graphics updates. Do not use untrusted driver downloads. Report the exact error and OS version.
-
-**Uninstall:** quit Burrow, then move Burrow.app to Trash on Mac or use **Settings → Apps → Installed apps → Burrow → Uninstall** on Windows. For portable copies, delete the extracted app folder after quitting. Uninstalling does not restore or empty previously trashed files.
-
-There is no automatic updater or background update check. Help/release links open the browser only when clicked. Normal launches do not capture screenshots; the explicit maintainer `--smoke-test` mode creates QA evidence only when requested.
-
-[Report a problem](https://github.com/NobleSpartan6/burrow/issues) with the app version, OS, processor, graphics adapter and reproduction steps. Redact private paths, filenames and account information before posting screenshots or logs publicly.
+On Windows, uninstall Burrow in **Settings → Apps**. On Mac, quit Burrow and move
+it from Applications to Trash. A portable copy can be removed after quitting it.
+There is no background service to stop. Saved cleanup preferences are kept so an
+update or reinstall does not silently forget protected folders.

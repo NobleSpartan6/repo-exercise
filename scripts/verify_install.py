@@ -45,7 +45,7 @@ def windows():
         else: raise RuntimeError('Uninstaller did not remove the application')
         (logs / 'INSTALL-TEST.txt').write_text(
             f'PASS: verified 0.1.1 installer -> {VERSION} in-place upgrade -> byte-identical executable '
-            '-> native four-page render -> uninstall, in an isolated CI install directory.\n'
+            '-> native six-page render -> uninstall, in an isolated CI install directory.\n'
             'Not a physical-device, SmartScreen, or interactive installer-wizard certification.\n', encoding='utf-8')
 
 
@@ -69,7 +69,7 @@ def macos(architecture):
         finally: run('hdiutil', 'detach', mount)
         (logs / 'INSTALL-TEST.txt').write_text(
             f'PASS: {label} DMG mounted read-only -> app copied out -> version and binary hash checked '
-            '-> ad-hoc signature verified -> native four-page render.\n'
+            '-> ad-hoc signature verified -> native six-page render.\n'
             'Not a Gatekeeper, notarization, Finder upgrade, or physical-device certification.\n', encoding='utf-8')
 
 

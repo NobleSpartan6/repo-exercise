@@ -1,9 +1,17 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "desktop")]
+pub mod awake;
+pub mod command;
 pub mod engine;
 pub mod latest;
+pub mod maintenance;
 pub mod metrics;
 pub mod platform;
+pub mod preferences;
+#[cfg(feature = "desktop")]
+pub mod software;
+pub mod treemap;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

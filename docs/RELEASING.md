@@ -1,10 +1,10 @@
-# Build, verify and release Burrow 0.2.0
+# Build, verify and release Burrow 0.3.0
 
 ## Automated preview path
 
 `.github/workflows/burrow.yml` runs on relevant pushes, pull requests and manual dispatch. It requires the committed Cargo.lock, checks Rust formatting and packaging regression tests, generates third-party notices and an exact locked source ZIP, then shares those inputs across the build matrix. It does not silently refresh dependency versions.
 
-The matrix builds on `macos-14` (Apple Silicon), `macos-15-intel` (Intel), `windows-2022` (Windows x64), and `ubuntu-24.04` (Linux QA only). Each runs unit/UI tests, strict Clippy and an optimized build. Mac and Windows additionally run a uniquely named disposable native Trash/recovery test. Windows verifies the published 0.1.1 installer's digest, installs it into an isolated directory, upgrades to this release, checks executable identity, renders the installed app and uninstalls. Mac mounts the DMG read-only, copies the app, checks version, hash and ad-hoc signature, then renders the copy. Native screenshot checks exercise all four pages at desktop, compact and enlarged-text settings. Linux also exercises native navigation/resize and a synthetic metadata-scan benchmark.
+The matrix builds on `macos-14` (Apple Silicon), `macos-15-intel` (Intel), `windows-2022` (Windows x64), and `ubuntu-24.04` (Linux QA only). Each runs unit/UI tests, strict Clippy and an optimized build. Mac and Windows additionally run a uniquely named disposable native Trash/recovery test. Windows verifies the published 0.1.1 installer's digest, installs it into an isolated directory, upgrades to this release, checks executable identity, renders the installed app and uninstalls. Mac mounts the DMG read-only, copies the app, checks version, hash and ad-hoc signature, then renders the copy. Native screenshot checks exercise all six screens at desktop, compact and enlarged-text settings. Linux also exercises native navigation/resize and a synthetic metadata-scan benchmark.
 
 Only a successful main push or explicit main dispatch with `publish_preview` selected may publish. The release job depends on every build and has the only release-write permission. It checks all expected assets, creates SHA-256 checksums, uploads to a draft, then publishes a prerelease. Failed builds cannot publish. Existing published assets are never silently overwritten; an unfinished draft must be inspected before retrying.
 
@@ -12,11 +12,11 @@ Tags follow `v<version>-preview-<short SHA>`. Cargo.toml is the version source f
 
 ## Expected assets
 
-- `Burrow-0.2.0-macOS-AppleSilicon.dmg`
-- `Burrow-0.2.0-macOS-Intel.dmg`
-- `Burrow-0.2.0-Windows-x64-Setup.exe`
-- `Burrow-0.2.0-Windows-x64-portable.zip`
-- `Burrow-0.2.0-source.zip`
+- `Burrow-0.3.0-macOS-AppleSilicon.dmg`
+- `Burrow-0.3.0-macOS-Intel.dmg`
+- `Burrow-0.3.0-Windows-x64-Setup.exe`
+- `Burrow-0.3.0-Windows-x64-portable.zip`
+- `Burrow-0.3.0-source.zip`
 - `Cargo.lock`, `THIRD_PARTY_NOTICES.txt`, `SHA256SUMS.txt`
 
 The `native-QA-<platform>` Actions artifacts contain actual native captures and launch/install reports. Inspect screenshots and logs, not just job names. Release preflight rejects missing, empty, unexpected or mixed-version assets. Each published release links its exact source commit and build run.
@@ -31,7 +31,7 @@ DMG creation retries only the observed transient Resource busy error, at most fo
 
 ## Manual packaging
 
-Install developer prerequisites from README; end users only need the prebuilt installer. Use the pinned Rust compiler and committed lock. Native packaging requires Python 3.11+; Windows also requires Inno Setup 6.
+Install developer prerequisites from docs/DEVELOPMENT.md; end users only need the prebuilt installer. Use the pinned Rust compiler and committed lock. Native packaging requires Python 3.11+; Windows also requires Inno Setup 6.
 
 ```sh
 cargo fmt --all -- --check
@@ -51,4 +51,4 @@ Use the CI pipeline to collect all platform packages, run `verify-release`, gene
 
 Windows previews are unsigned. Mac previews are ad-hoc signed, not Developer ID signed or notarized. Do not buy certificates, invent credentials, remove quarantine attributes or disable OS protections as a release shortcut. Provision production signing under the maintainer's control in a protected secret store; sign before checksums, notarize/staple Mac packages, and test real browser-downloaded files.
 
-A green hosted-runner run is not a physical-device, Gatekeeper, SmartScreen or independent security certification. Keep prerelease status until representative hardware, display scaling, assistive technology, network/cloud volumes and real recovery workflows have been checked. Keep backups and begin with read-only Disk explorer. Never claim zero flaws or guaranteed recovery. New failures should become reproducible regression tests; do not weaken a check merely to make a build pass.
+A green hosted-runner run is not a physical-device, Gatekeeper, SmartScreen or independent security certification. Keep prerelease status until representative hardware, display scaling, assistive technology, network/cloud volumes and real recovery workflows have been checked. Keep backups and begin with read-only Analyze. Never claim zero flaws or guaranteed recovery. New failures should become reproducible regression tests; do not weaken a check merely to make a build pass.

@@ -84,13 +84,27 @@ fn all_pages_render_at_desktop_compact_and_large_text_sizes() {
     let ctx = egui::Context::default();
     let mut app = Burrow::with_context(&ctx, false, false);
     for size in [[1060.0, 800.0], [720.0, 560.0], [480.0, 373.0]] {
-        for page in [Page::Overview, Page::Cleanup, Page::Explorer, Page::About] {
+        for page in [
+            Page::Cleanup,
+            Page::Software,
+            Page::Optimize,
+            Page::Explorer,
+            Page::Overview,
+            Page::About,
+        ] {
             app.navigate(page, &ctx);
             for _ in 0..3 {
                 let output = frame(&mut app, &ctx, size, vec![]);
                 assert!(!output.shapes.is_empty());
             }
-            for name in ["Overview", "Clean up", "Disk explorer", "About & help"] {
+            for name in [
+                "Clean",
+                "Apps",
+                "Optimize",
+                "Analyze",
+                "Status",
+                "About & help",
+            ] {
                 let r = rect(&ctx, name);
                 assert!(
                     r.height() <= 40.0,
@@ -111,14 +125,14 @@ fn navigation_buttons_switch_pages_without_starting_work() {
     for _ in 0..3 {
         frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
     }
-    click(&mut app, &ctx, "Clean up");
+    click(&mut app, &ctx, "Clean");
     assert!(app.page == Page::Cleanup);
     assert!(app.busy.is_none());
-    click(&mut app, &ctx, "Disk explorer");
+    click(&mut app, &ctx, "Analyze");
     assert!(app.page == Page::Explorer);
     click(&mut app, &ctx, "About & help");
     assert!(app.page == Page::About);
-    click(&mut app, &ctx, "Overview");
+    click(&mut app, &ctx, "Status");
     assert!(app.page == Page::Overview);
 }
 #[test]
@@ -220,4 +234,129 @@ fn explorer_is_read_only_for_empty_and_populated_folders() {
     }
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     assert!(app.busy.is_none());
+}
+
+#[test]
+fn new_workspaces_do_not_run_commands_on_navigation() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    for page in [
+        Page::Software,
+        Page::Optimize,
+        Page::Explorer,
+        Page::Overview,
+    ] {
+        app.navigate(page, &ctx);
+        for _ in 0..3 {
+            frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+        }
+        assert!(app.busy.is_none());
+        assert!(app.workspace.maintenance_selected.is_empty());
+        assert!(!app.workspace.allow_online);
+        assert!(app.workspace.awake.is_none());
+    }
+}
+#[test]
+fn online_checks_require_explicit_opt_in() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.page = Page::Software;
+    app.workspace.software_tab = workspaces::SoftwareTab::Updates;
+    for _ in 0..3 {
+        frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    }
+    click(&mut app, &ctx, "Check for app updates");
+    assert!(app.busy.is_none());
+    assert!(!app.workspace.allow_online);
+}
+#[test]
+fn app_and_process_filters_keep_bounded_virtual_rows() {
+    use crate::monitor::{DetailSnapshot, ProcessRow};
+    use burrow::software::{Application, Inventory};
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.workspace.apps = Some(Inventory {
+        apps: (0..2000)
+            .map(|i| Application {
+                name: format!("App {i}"),
+                ..Default::default()
+            })
+            .collect(),
+        notes: vec![],
+    });
+    app.workspace.refilter_apps();
+    app.page = Page::Software;
+    let output = frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    assert!(output.shapes.len() < 2500);
+    app.workspace.app_filter = "App 1999".into();
+    app.workspace.refilter_apps();
+    assert_eq!(app.workspace.app_rows.len(), 1);
+    app.workspace.details = DetailSnapshot {
+        ready: true,
+        process_count: 4096,
+        processes: (0..4096)
+            .map(|i| ProcessRow {
+                pid: i,
+                started: 1,
+                name: format!("Process {i}"),
+                cpu: i as f32,
+                memory: u64::from(i) * 1024,
+            })
+            .collect(),
+        ..Default::default()
+    };
+    app.workspace.refilter_processes();
+    assert_eq!(
+        app.workspace.details.processes[app.workspace.process_rows[0]].pid,
+        4095
+    );
+    app.workspace.pinned.insert((1, 1));
+    app.workspace.refilter_processes();
+    assert_eq!(
+        app.workspace.details.processes[app.workspace.process_rows[0]].pid,
+        1
+    );
+    app.workspace.details.processes[1].started = 2;
+    app.workspace.refilter_processes();
+    assert!(!app.workspace.pinned.contains(&(1, 1)));
+    app.page = Page::Overview;
+    let output = frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    assert!(output.shapes.len() < 2500);
+}
+#[test]
+fn maintenance_review_can_be_cancelled_without_running_anything() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.page = Page::Optimize;
+    app.workspace.maintenance_selected = vec![burrow::maintenance::Action::LookupCache];
+    app.workspace.maintenance_confirm = true;
+    for _ in 0..3 {
+        frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    }
+    key(&mut app, &ctx, egui::Key::Escape, Modifiers::NONE);
+    assert!(!app.workspace.maintenance_confirm);
+    assert!(app.busy.is_none());
+    assert!(app.workspace.maintenance_report.is_empty());
+}
+#[test]
+fn broken_preferences_pause_cleanup_but_not_analysis_navigation() {
+    let ctx = egui::Context::default();
+    let mut app = Burrow::with_context(&ctx, false, false);
+    app.workspace.preferences_error = Some("Invalid preferences".into());
+    app.start(Task::Preview(7), &ctx);
+    assert!(app.busy.is_none());
+    assert!(app.preview.is_none());
+    app.navigate(Page::Explorer, &ctx);
+    frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+    assert!(app.page == Page::Explorer);
+    app.busy = Some("Saving your preferences");
+    app.tx.send(Event::Error("Disk is full".into())).unwrap();
+    app.receive();
+    assert_eq!(
+        app.workspace.preferences_error.as_deref(),
+        Some("Disk is full")
+    );
+    app.tx.send(Event::PreferencesSaved).unwrap();
+    app.receive();
+    assert!(app.workspace.preferences_error.is_none());
 }

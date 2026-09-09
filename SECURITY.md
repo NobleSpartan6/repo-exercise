@@ -1,41 +1,76 @@
-# Safety boundaries and security policy
+# Safety, privacy, and reporting
 
-## Intended use
+Burrow is preview software. Keep backups and start with the read-only Analyze
+workspace. A successful build or recovery test does not prove that every machine,
+filesystem, concurrent edit, or third-party app is safe.
 
-Burrow is preview, user-level software for reviewing old files in a deliberately narrow cache allowlist on a **non-adversarial local machine**. It is not an antivirus, an OS optimizer, a privileged administration agent, a secure erasure tool, or a filesystem sandbox. Do not run it elevated. Keep backups and close the relevant apps before cleanup.
+## What can change
 
-## Destructive capability
+**Clean** moves only explicitly selected old regular files from known cache
+folders to the OS Trash/Recycle Bin. It checks their identity, age, metadata, and
+allowed root again before each move. Disabled groups and protected folders reduce
+the preview; they never add cleanup locations.
 
-The only production cleanup sink is `trash::delete`, invoked serially for explicitly selected preview candidates. There is no `remove_file`, recursive permanent-delete fallback, Trash-empty operation, downloaded command, arbitrary shell execution, registry editing or sudo path in the app. Build scripts and isolated test fixtures are a separate context.
+**Mac app removal** has a separate review. Only eligible app bundles directly in
+Applications or its Utilities folder can be considered. Apple bundle IDs, unknown
+identities, changed bundles, expired reviews, running apps, and Burrow itself are
+refused. Metadata for the whole bundle is compared again before moving it. Related
+settings, shared services, and support files are not removed. Apps with services,
+drivers, or extensions should use their vendor's uninstaller.
 
-The UI sends no arbitrary filesystem path to a deletion endpoint. Candidate fingerprints are private engine state, not deserialized UI-supplied metadata. The cleanup worker independently rediscovers the OS cache allowlist. Disk explorer cannot issue cleanup candidates.
+**Optimize** runs only a reviewed list of fixed OS tasks. Tool failures remain
+failures. It never uses elevated privileges, force-purges memory, repairs registry
+entries, or changes thermal limits. The screen-on request is opt-in, timed, and
+released on stop or quit; normal OS sleep policies still apply.
 
-Every selected candidate is revalidated immediately before the OS Trash request: current allowlist membership; absolute path and component-aware containment; no parent traversal; no symlinks in any ancestor; no Windows reparse points, junctions, offline or recall-on-access placeholders; a regular file rather than a directory; matching size, modification time and available creation time; and the original minimum age. Unix also checks inode/device identity and excludes multiply hard-linked files. Duplicate selections are processed once. Changed/missing files and errors are reported individually.
+**Analyze** and app/startup inventories are read-only. Windows app removal opens
+Installed apps; Burrow never runs command strings obtained from the registry.
+Update checks do not install updates and require explicit internet permission.
 
-These guards reduce accidental scope expansion. They do not make cleanup intrinsically harmless: old caches may still be open, useful offline, expensive to regenerate or needed by a running app. The age check uses modification time, not last access time. macOS/Unix can allow a move while a process still has a file open. The user must close affected apps and review the selection.
+## Recovery and limits
 
-## Residual risks: do not overstate the guarantees
+Burrow never empties Trash and never falls back to permanent deletion. After an
+error, inspect both Trash and the original location before retrying. Cancellation
+stops remaining work where possible; it does not undo completed changes.
 
-**TOCTOU:** validation and the native path-based Trash request are separate operations. Another process with the same user privileges could swap a path or ancestor after validation. Inode checks on Unix do not make the subsequent path-based request atomic. Windows validation compares size and timestamps, not a stable NTFS file ID or held file handle; a deliberately replaced file with identical metadata may evade that fingerprint. This app is not hardened against a malicious or concurrently mutating same-user filesystem. An adversarial or privileged deployment requires handle-relative, platform-specific atomic operations and a separate security review.
+Filesystem validation rejects unsafe ancestors, links, Windows reparse points,
+and cloud placeholders for cleanup. App bundles may contain internal symlinks;
+review records those links without following their targets. The OS Trash API is
+path-based, so a small same-user time-of-check/time-of-use race still exists.
+Metadata checks cannot detect an adversary who perfectly forges file metadata.
+Do not run Burrow as an administrator or against files another program is changing.
 
-**Filesystem traversal:** no-follow and same-filesystem traversal checks are best-effort snapshots. Permission errors, concurrent renames, mount changes and link races may make scan totals incomplete. Limits and cancellations are exposed as partial results. OS filesystem calls can block beyond the cooperative time budget. Root-discovery errors are surfaced; some inaccessible paths can be skipped.
+OS tools run with fixed executable paths and separately passed arguments. Output
+and waiting time are bounded. Cancellation does not promise to roll back a tool's
+changes or immediately interrupt a blocked OS/filesystem call. Third-party update
+sources and vendor uninstallers have their own trust and permission boundaries.
 
-**Trash semantics:** the app requests the OS Trash service and never substitutes permanent deletion itself. This does not guarantee recoverability under every OS setting, quota, volume, filesystem or policy. Native operation errors can leave outcomes uncertain. Inspect Trash before retrying, and use a backup for important data. Moving to Trash does not necessarily free any physical disk space. Burrow never empties it.
+## Local data and network use
 
-**Metrics:** disk explorer reports logical lengths, not uniquely allocated bytes. Compression, clones, sparse files and hard links affect physical storage. Volumes can share a backing disk or APFS container; do not add their capacities together as independent physical space.
+There are no accounts, ads, or telemetry. Burrow reads metadata rather than user
+file contents for storage scans. It reads small app manifests and startup
+registrations for the Apps workspace. It samples process names, IDs, CPU, and
+memory; it does not read process environments or command lines for Status.
 
-## Privacy
+Cleanup settings are saved in a small local `Burrow/preferences.json` file under
+the OS local application-data folder. It contains cache-group choices and
+protected paths. Writes use a temporary file and atomic replacement. Invalid
+preferences are reported, not silently rewritten. Inventories and task logs remain
+in memory unless you copy them. Update sources are contacted only for an opted-in
+update check; opening a system tool hands control to that tool.
 
-No account, telemetry, analytics, remote scanning, update checker or background service is implemented. Scan paths, selections and reports are held in memory and are lost on exit. A user can explicitly copy a report to the clipboard or open a fixed documentation/source link in their browser. The clipboard, browser, crash reporting and OS signature checks have their own behavior outside Burrow.
+Normal launches never take screenshots. Explicit QA modes can capture Burrow's
+own GPU surface or emit control positions. CI uses temporary fixtures and
+hosted-runner data, not a user's computer.
 
-## Verification and release status
+## Downloads and reports
 
-Unit tests cover age limits, future and recent files, changed and missing candidates, allowlist rejection, duplicate selections, overlapping roots, cancellation, Trash failure without fallback, top-K bounded read-only analysis, parent traversal, Unix links/ancestor swaps/hard links and Windows junctions. Unit tests inject a mock Trash sink and do not prove native restoration behavior. GUI smoke tests exercise native window creation and navigation in Linux/Xvfb, not every end-to-end workflow on physical Mac/Windows devices.
+Windows previews are unsigned; Mac previews are ad-hoc signed but not notarized.
+Do not disable OS security protections. Release checksums detect changed downloads
+but are not verified publisher identity or an independent security audit.
 
-Preview packages are not signed with a verified Windows publisher identity or Apple Developer ID and are not notarized. A green CI run proves the recorded jobs passed; it is not a security certification, malware verdict, or blanket compatibility guarantee. SHA-256 checksums detect changed artifact bytes, not malicious source or a compromised release account.
-
-Before declaring a stable release, test installation, preview/selection/confirmation, cancellation, denied permissions, actual native Trash behavior and manual restoration on disposable data on physical Apple Silicon, Intel Mac and Windows hardware. Check accessibility, scaling, keyboard navigation, multiple profiles, cache rebuild behavior and performance measurements. Review transitive dependencies and generated notices. Add trusted platform signing and macOS notarization through securely managed credentials; do not paste private certificates into the repository.
-
-## Reporting
-
-Do not post private file paths, credentials, exploit details or personal data in a public issue. Use GitHub's private vulnerability reporting when it is enabled for this repository, or first ask the maintainer for a private reporting channel without disclosing the vulnerability. Ordinary non-sensitive bugs can use the issue tracker. No private reporting address is fabricated here.
+For a reproducible non-sensitive bug, use the repository issue form. Redact
+personal paths, usernames, app lists, and private data. Do not put credentials or
+an exploitable private-data exposure into a public issue. Use GitHub's private
+vulnerability reporting when it is available; otherwise contact the repository
+owner privately before sharing details.

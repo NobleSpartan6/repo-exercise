@@ -1,62 +1,49 @@
-# Burrow 0.2.0 — modern native interface preview
+# Burrow 0.3.0 preview
 
-A charcoal-and-mint redesign inspired by the restraint of Mole's desktop UI.
-Still free, MIT-licensed, local-only, and native Rust/egui on Mac and Windows.
+Five workspaces for reviewing storage and seeing what your computer is doing.
+Free, MIT-licensed, and built with native Rust/egui for Mac and Windows.
 
-## What changed
+## New in this preview
 
-- Replaced the large sidebar with compact segmented top navigation.
-- Added a clear visual hierarchy, locally loaded system typography, quieter
-  panels, rounded controls, static orbital accents and cleaner filename/path rows.
-- Made compact and enlarged-text layouts scrollable; added explicit filtered-empty
-  and unavailable-reading states. Confirmation remains separate and required.
-- Kept the performance budget: virtualized lists, cached totals, metadata-only
-  scans, bounded workers, independent system/drive sampling, no decorative
-  animation loop, browser runtime, remote assets or bundled OS fonts.
-- Updated links for the renamed `NobleSpartan6/burrow` repository.
-- Added native GUI startup checks, headless click/selection/confirmation tests,
-  Windows upgrade/install/uninstall checks, Mac packaged-app launch checks, and a
-  native Trash/recovery test that touches only one uniquely named disposable file.
-- Added a readable startup-error dialog instead of silent graphics-start failures.
+- **Clean:** saved cache-group choices and protected folders. The cache allowlist
+  is not expanded; nothing is selected or removed automatically.
+- **Apps:** installed-app search, size inspection, startup registrations, and
+  opt-in WinGet/Homebrew update checks. Mac bundle removal has a separate review;
+  Windows opens Installed apps for the vendor's uninstaller.
+- **Optimize:** reviewed maintenance tasks, per-task results, system-tool shortcuts,
+  and a timed screen-on session that ends when you stop it or quit.
+- **Analyze:** a read-only folder map with drill-down, breadcrumbs, direct-child
+  totals, and the largest files.
+- **Status:** process search/sort/pinning, network rates, swap, uptime, battery,
+  available temperatures, and a floating mini monitor.
+- Shorter README, clearer first steps, and an explicit feature-coverage table.
 
-The production cache allowlist and deletion engine are not broadened by this
-redesign. Disk explorer remains read-only. Nothing is selected or removed
-without your choice and confirmation. No health scores or fake performance
-numbers; no promise to make your computer faster.
+[Install or update](https://github.com/NobleSpartan6/burrow/blob/main/docs/INSTALL.md)
+· [First steps](https://github.com/NobleSpartan6/burrow/blob/main/docs/TRY_BURROW.md)
+· [Feature coverage](https://github.com/NobleSpartan6/burrow/blob/main/docs/FEATURES.md)
 
-## Install or update
+## Install
 
-**Windows:** download `Burrow-0.2.0-Windows-x64-Setup.exe`, close the old app after
-active work finishes, and run the installer using your normal user account.
-Keep the installation location. No uninstall or administrator mode is needed.
-Open About & help and check **0.2.0**.
+On Windows, quit the old app and run `Burrow-0.3.0-Windows-x64-Setup.exe` under your
+normal account, keeping the installation folder. On Mac, choose the DMG for your
+chip, quit Burrow, and drag the new copy into Applications. Choose Replace.
+Source ZIPs are for developers. Check **? → About & help** for version 0.3.0.
 
-**Mac:** choose the AppleSilicon DMG for an Apple M-series chip or the Intel DMG
-for an Intel Mac. Quit the old app, open the DMG, drag Burrow into Applications,
-and choose Replace. Source ZIPs are not installers. Portable Windows copies
-are updated separately by extracting and opening the newer portable ZIP.
+## Know before trying it
 
-[Plain-language installation guide](https://github.com/NobleSpartan6/burrow/blob/main/docs/INSTALL.md).
-Copy any cleanup session log before quitting; it is not saved automatically.
+This is not full Mole feature parity. There is no built-in bulk app updater,
+related-data deletion, GPU usage/fan control, battery-health management, or
+menu-bar/system-tray integration. The feature table explains other limits.
 
-## Verification and limits
+Windows builds are unsigned. Mac builds are ad-hoc signed but not notarized. Do
+not disable security protections. Automated hosted-runner checks are not a
+physical-device test, independent security audit, or guarantee of zero bugs.
 
-Publication is gated on the checks in the linked build run. The Windows upgrade
-check runs the verified 0.1.1 installer and this release's installer in an isolated
-CI folder, checks the installed executable, launches it, and uninstalls it. The
-Mac check mounts the DMG, copies the app, verifies its version and ad-hoc signature,
-and launches the copied executable. Neither simulates Gatekeeper or SmartScreen.
-The disposable Trash test verifies one native move and recovery, not every volume,
-OS setting, concurrent modification, or user recovery workflow.
+Keep backups and try Analyze first. Moving files to Trash does not immediately
+free space. Burrow never empties Trash or permanently deletes when a move fails.
+Inspect Trash after errors; stopping a task does not undo completed changes.
+Use a vendor uninstaller for apps with drivers, extensions, or background services.
 
-This is preview software, not flawless or independently security-audited software.
-Physical-device installations and unusual graphics, accessibility, network and
-cloud configurations still need separate testing. Windows builds remain unsigned;
-Mac builds are ad-hoc signed but not notarized. Do not disable security protections.
-
-Keep backups. Moving files to Trash does not immediately free disk space. Burrow
-never empties Trash. Inspect it after errors; cancellation does not undo completed
-moves. Close apps whose caches you select, as regenerating caches may require
-connectivity or temporarily slow apps down.
-
-Native rendering in 0.2.0 uses Metal on Mac and DirectX 12 on Windows, with a low-power adapter preference. Linux remains a separate OpenGL QA target. No browser runtime is introduced. Native QA uses an explicit `--smoke-test` launch with `BURROW_SMOKE_OUTPUT` pointing to an empty evidence directory. It captures the app's GPU surface using egui screenshot events, not the unsupported eframe screenshot environment variable. Normal launches never capture or save screenshots.
+Inventories stay local. App update checks use the internet only after you enable
+them. Cleanup preferences save protected paths locally; session logs and
+inventories are not saved automatically. Copy any log you need before quitting.

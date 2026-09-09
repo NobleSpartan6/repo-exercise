@@ -1,49 +1,45 @@
-# Burrow 0.2 — native visual specification
+# Interface design
 
-Reference inspected: https://mole.fit/ and its published Clean/Status screenshots.
-The relevant direction is a dark, restrained canvas with compact top navigation,
-strong hierarchy, generous whitespace and a simple focal point. Not a clone of
-the website, its solar-system artwork, or its additional product features.
+## Structure
 
-Two generated concept boards were rejected: both introduced unrelated features
-and a light sidebar. They are not production specifications and are not shipped.
-The explicit specification below and the live reference govern implementation.
+Five centered tabs—Clean, Apps, Optimize, Analyze, Status—match the reference's
+workflow. A separate help button keeps the main navigation short. Workspaces use
+the same controls, spacing, typography, and confirmation patterns on Mac and
+Windows; native title-bar and window controls remain with the OS.
 
-## Shared tokens
+Clean emphasizes review. Apps uses searchable rows and a selected-app detail area.
+Optimize presents named tasks, not a vague speed-up score. Analyze gives space to
+a proportional map and breadcrumbs. Status groups live readings above a process
+list. Compact and enlarged-text layouts scroll rather than hiding primary actions.
 
-Background #111519; surfaces #191F24; border #313C42; hover #242D33;
-text #EDF2F0; muted #A1B2B5; mint #97E4C0; text on mint #102C21;
-warning #F4C57A; danger #FF9A9A. Native window controls remain intact.
+## Visual language
 
-System sans-serif fonts are loaded locally, validated, and never distributed.
-Use Segoe UI on Windows, SF/Arial on Mac, and DejaVu Sans on Linux QA; fall back
-to egui's included fonts if unavailable. Headings 28–36 logical pixels, controls
-13–14, details 11–12. Borders 1px, panel radius 16, button radius 11, content
-width at most 900px. Keyboard focus remains visible. Text scale uses egui zoom.
+| Role | Color |
+| --- | --- |
+| Background | `#111519` |
+| Panel | `#191F24` |
+| Raised control | `#242D33` |
+| Border | `#313C42` |
+| Text | `#EDF2F0` |
+| Secondary text | `#A1B2B5` |
+| Mint accent | `#97E4C0` |
+| Warning | `#F4C57A` |
+| Error | `#FF9A9A` |
 
-## Screens and states
+UI text and controls are real native widgets, not a screenshot. Buttons have
+visible focus states. System typography has a bundled-library fallback when the
+OS font cannot be read. Lists truncate long paths with a full-path tooltip.
 
-- Overview: centered static orbital emblem; “Room to breathe.”; two actions;
-  CPU and RAM readings; a drive list with free/total/used labels outside bars.
-  Unknown and stale readings are explicit. No health score or guessed values.
-- Clean up: centered scan entry; age choice; allowlist explanation. Results use
-  a cached byte total, filter, visible selection, clear selection, separate
-  review, virtualized filename/path/size rows, and a confirmation acknowledgement.
-  Empty, filtered-empty, partial, busy, cancelled and failure states are explicit.
-- Disk explorer: centered read-only folder picker; result summary and virtualized
-  rows. Copy path is the only per-file action. No delete or permanent removal.
-- About & help: the same typography and surfaces, operating boundaries, keyboard
-  controls, privacy details, installation and update links. No extra Tools page.
+## Differences from Mole
 
-Top navigation remains visible. Compact mode uses shorter tab labels at narrow
-logical widths. Content and confirmation windows scroll rather than hiding
-controls at increased text scale. There is no whole-app backdrop blur, looping
-animation, remote asset, browser runtime or raster screenshot used as UI.
+Burrow keeps its own name, icon, charcoal/mint colors, and static accents. It does
+not copy the reference's planetary artwork or pretend unsupported hardware data
+exists. The miniature monitor is a separate floating window. Missing features and
+system handoffs are listed in [Feature coverage](FEATURES.md).
 
-## QA comparison points
+## Review each change
 
-Inspect screenshots at 1060x800 and 720x560 plus enlarged text. Check layout,
-palette, typography, spacing, navigation, row truncation, capacity labels and
-empty/confirmation states against this specification. Pointer and keyboard tests
-are distinct from screenshot inspection. Record deviations honestly; never call
-an unrelated generated concept an approved or matched design.
+Inspect desktop, compact, and 150% text captures. Check navigation, primary actions,
+long names, dense lists, empty states, unavailable data, progress, and confirmation.
+Use UI tests for click behavior and the native smoke tools for GPU rendering. A
+successful compiler run is not a visual review.

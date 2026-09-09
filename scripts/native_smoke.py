@@ -7,7 +7,7 @@ import subprocess
 import sys
 from package import VERSION
 
-PAGES = ('overview', 'cleanup', 'explorer', 'help')
+PAGES = ('cleanup', 'apps', 'optimize', 'explorer', 'status', 'help')
 SIZES = ('desktop', 'compact', 'large-text')
 
 
@@ -44,10 +44,10 @@ def verify(binary: Path, logs: Path) -> None:
                 raise RuntimeError(f'Missing native capture acknowledgement: {page}, {size}')
             validate_png(shots / f'native-{page}-{size}.png')
     (logs / 'NATIVE-QA.txt').write_text(
-        f'PASS: {VERSION}: installed release binary; four pages at desktop, compact, and 150% text scale; '
-        '12 nonblank native GPU captures; normal shutdown. No cache scan or cleanup performed.\n'
+        f'PASS: {VERSION}: installed release binary; six pages at desktop, compact, and 150% text scale; '
+        '18 nonblank native GPU captures; normal shutdown. No cache scan or cleanup performed.\n'
         'Screenshot checks do not certify every GPU, assistive technology, or physical device.\n', encoding='utf-8')
-    print(f'PASS: {binary.name}: 12 native GPU view captures and clean shutdown.')
+    print(f'PASS: {binary.name}: 18 native GPU view captures and clean shutdown.')
 
 
 if __name__ == '__main__':

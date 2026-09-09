@@ -51,7 +51,7 @@ impl NativeCheck {
                 return None;
             }
         }
-        if self.stage >= 12 {
+        if self.stage >= 18 {
             println!("BURROW_UI_SMOKE_OK {}", burrow::VERSION);
             self.finished = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -59,7 +59,7 @@ impl NativeCheck {
         }
         ctx.request_repaint_after(Duration::from_millis(80));
         if !self.configured {
-            let group = self.stage / 4;
+            let group = self.stage / 6;
             let size = if group == 0 {
                 [1060.0, 800.0]
             } else {
@@ -69,7 +69,7 @@ impl NativeCheck {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size.into()));
             self.configured = true;
             self.since = Instant::now();
-            return Some(self.stage % 4);
+            return Some(self.stage % 6);
         }
         let settle = if self.stage == 0 {
             Duration::from_millis(2500)
@@ -126,8 +126,8 @@ impl NativeCheck {
             .as_ref()
             .ok_or("No screenshot output directory")?;
         std::fs::create_dir_all(output).map_err(|e| e.to_string())?;
-        let page = ["overview", "cleanup", "explorer", "help"][self.stage % 4];
-        let size = ["desktop", "compact", "large-text"][self.stage / 4];
+        let page = ["cleanup", "apps", "optimize", "explorer", "status", "help"][self.stage % 6];
+        let size = ["desktop", "compact", "large-text"][self.stage / 6];
         let path = output.join(format!("native-{page}-{size}.png"));
         // Refuse to overwrite old evidence, rather than accidentally validating it.
         let file = std::fs::OpenOptions::new()

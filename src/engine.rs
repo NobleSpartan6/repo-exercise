@@ -81,7 +81,7 @@ impl Stamp {
     }
 }
 
-fn is_link_or_placeholder(meta: &Metadata) -> bool {
+pub(crate) fn is_link_or_placeholder(meta: &Metadata) -> bool {
     if meta.file_type().is_symlink() {
         return true;
     }
@@ -99,7 +99,7 @@ fn is_link_or_placeholder(meta: &Metadata) -> bool {
 /// Check every existing component, not just the final file. On Windows this
 /// rejects junctions/reparse points too. Path-based OS APIs still have a small
 /// same-user TOCTOU window; see SECURITY.md, and never run this app elevated.
-fn checked_path(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn checked_path(path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err("An absolute path without '..' is required".into());
     }
@@ -348,16 +348,27 @@ pub fn clean_selected(files: &[Candidate], control: &Control) -> Cleanup {
     })
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LargeFile {
     pub path: PathBuf,
     pub bytes: u64,
 }
 
+#[derive(Clone, Debug)]
+pub struct FolderEntry {
+    pub path: PathBuf,
+    pub bytes: u64,
+    pub files: u64,
+    pub is_dir: bool,
+}
+pub const MAX_CHILDREN: usize = 2048;
+
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub root: PathBuf,
     pub top: Vec<LargeFile>,
+    pub children: Vec<FolderEntry>,
+    pub other_bytes: u64,
     pub total_bytes: u64,
     pub files: u64,
     pub skipped: u64,
@@ -367,7 +378,7 @@ pub struct Analysis {
     pub elapsed: Duration,
 }
 
-/// Read-only, single pass, O(TOP_FILES) retained file records. Logical sizes are
+/// Read-only, single pass. Retains at most TOP_FILES file records and MAX_CHILDREN child totals. Logical sizes are
 /// not allocated bytes: sparse, compressed, cloned and hard-linked files differ.
 pub fn analyze(folder: &Path, control: &Control) -> Result<Analysis, String> {
     let root = checked_path(folder)?;
@@ -380,6 +391,7 @@ pub fn analyze(folder: &Path, control: &Control) -> Result<Analysis, String> {
         ..Analysis::default()
     };
     let mut top = BinaryHeap::new();
+    let mut children = std::collections::BTreeMap::<PathBuf, FolderEntry>::new();
     let mut walker = WalkDir::new(&root)
         .follow_links(false)
         .same_file_system(true)
@@ -411,6 +423,16 @@ pub fn analyze(folder: &Path, control: &Control) -> Result<Analysis, String> {
             result.skipped += 1;
             continue;
         }
+        if entry.depth() == 1 && meta.is_dir() && children.len() < MAX_CHILDREN {
+            children
+                .entry(entry.path().to_path_buf())
+                .or_insert_with(|| FolderEntry {
+                    path: entry.path().to_path_buf(),
+                    bytes: 0,
+                    files: 0,
+                    is_dir: true,
+                });
+        }
         if meta.is_dir() {
             if entry.depth() == MAX_DEPTH {
                 result.partial = true;
@@ -423,11 +445,32 @@ pub fn analyze(folder: &Path, control: &Control) -> Result<Analysis, String> {
         }
         result.files += 1;
         result.total_bytes = result.total_bytes.saturating_add(meta.len());
+        if let Ok(relative) = entry.path().strip_prefix(&root)
+            && let Some(first) = relative.components().next()
+        {
+            let key = root.join(first.as_os_str());
+            if children.contains_key(&key) || children.len() < MAX_CHILDREN {
+                let child = children.entry(key.clone()).or_insert_with(|| FolderEntry {
+                    path: key,
+                    bytes: 0,
+                    files: 0,
+                    is_dir: entry.depth() > 1,
+                });
+                child.bytes = child.bytes.saturating_add(meta.len());
+                child.files = child.files.saturating_add(1);
+            } else {
+                result.other_bytes = result.other_bytes.saturating_add(meta.len());
+            }
+        }
         top.push(Reverse((meta.len(), entry.path().to_path_buf())));
         if top.len() > TOP_FILES {
             top.pop();
         }
     }
+    result.children = children.into_values().collect();
+    result
+        .children
+        .sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.path.cmp(&b.path)));
     result.top = top
         .into_iter()
         .map(|Reverse((bytes, path))| LargeFile { path, bytes })
@@ -697,3 +740,36 @@ mod tests {
 #[cfg(all(test, any(windows, target_os = "macos")))]
 #[path = "native_tests.rs"]
 mod native_tests;
+
+#[cfg(test)]
+mod tree_tests {
+    use super::*;
+    #[test]
+    fn child_totals_reconcile_with_parent() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir(d.path().join("a")).unwrap();
+        std::fs::write(d.path().join("a/one"), [1; 11]).unwrap();
+        std::fs::write(d.path().join("two"), [1; 7]).unwrap();
+        let a = analyze(&d.path().canonicalize().unwrap(), &Control::default()).unwrap();
+        assert_eq!(
+            a.children.iter().map(|c| c.bytes).sum::<u64>() + a.other_bytes,
+            18
+        );
+        assert_eq!(a.children.iter().filter(|c| c.is_dir).count(), 1);
+        assert_eq!(a.files, 2);
+    }
+    #[test]
+    fn child_count_is_bounded_and_overflow_is_counted() {
+        let d = tempfile::tempdir().unwrap();
+        for i in 0..MAX_CHILDREN + 3 {
+            std::fs::write(d.path().join(format!("f{i}")), [1]).unwrap();
+        }
+        let a = analyze(&d.path().canonicalize().unwrap(), &Control::default()).unwrap();
+        assert_eq!(a.children.len(), MAX_CHILDREN);
+        assert_eq!(a.other_bytes, 3);
+        assert_eq!(
+            a.children.iter().map(|c| c.bytes).sum::<u64>() + a.other_bytes,
+            a.total_bytes
+        );
+    }
+}

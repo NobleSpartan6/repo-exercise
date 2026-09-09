@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 — five workspaces
+
+Adds app/startup inventories, opt-in update checks, reviewed Mac bundle removal,
+maintenance tasks, a timed screen-on session, a drill-down folder map, richer
+status readings, process filters/pins, and a floating mini monitor. Cleanup now
+saves cache choices and protected folders. The README and guides are rewritten
+for everyday use. [Feature coverage](docs/FEATURES.md) lists platform differences
+and features still missing from the Mole reference.
+
+Expanded tests cover parsing failures, cancellation, changed app bundles,
+preferences, proportional maps, filters, virtual rows, native discovery, and
+six-screen rendering. Preview signing limitations remain unchanged.
+
 ## 0.2.0
 
 Modern native dark interface, top navigation, system typography, scrollable compact layouts, virtualized rows and cached totals. Expanded native startup, confirmation, packaging, installer and disposable Trash recovery tests. Updated repository links. No broader cleanup permissions, browser runtime, or decorative animation loop.
