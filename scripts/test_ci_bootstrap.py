@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,10 +40,10 @@ class LinuxBootstrapTests(unittest.TestCase):
                         'scrot', 'fonts-dejavu-core'):
             self.assertIn(package, step)
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Ubuntu-only bootstrap syntax check')
     def test_bootstrap_is_valid_bash(self):
         bash = shutil.which('bash')
-        if bash is None:
-            self.skipTest('Bash syntax is checked on Linux CI')
+        self.assertIsNotNone(bash, 'Linux CI must have Bash to validate its bootstrap')
         script = self.step().split('        run: |\n', 1)[1]
         script = '\n'.join(line[10:] for line in script.splitlines())
         subprocess.run([bash, '-n'], input=script, text=True, check=True, timeout=10)
