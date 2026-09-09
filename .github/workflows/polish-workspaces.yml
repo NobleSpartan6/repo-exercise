@@ -1,0 +1,59 @@
+name: Prepare workspace lint and stale-selection corrections
+on:
+  push:
+    branches: ['release-prep/0.3.0-polish']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install formatter
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Apply reviewed corrections and export formatted blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,subprocess,zipfile
+          p=Path('src/software.rs');s=p.read_text();s=s.replace('    command,\n','');s=s.replace('use std::path::{Path, PathBuf};','#[cfg(any(windows, target_os = "macos"))]\nuse crate::command;\nuse std::path::{Path, PathBuf};');p.write_text(s)
+          p=Path('src/command.rs');s=p.read_text().replace('return Err("This shortcut is available on Mac and Windows.".into());','Err("This shortcut is available on Mac and Windows.".into())').replace('return Err("Use Copy path with your file manager on this OS.".into());','Err("Use Copy path with your file manager on this OS.".into())');p.write_text(s)
+          p=Path('src/workspaces.rs');s=p.read_text();s=s.replace('ui.close();}if ui.add_enabled','ui.close();}\nif ui.add_enabled');p.write_text(s)
+          p=Path('src/ui.rs');s=p.read_text();s=s.replace('                Event::Software(inventory) => {\n                    self.workspace.apps','                Event::Software(inventory) => {\n                    self.workspace.app_selected = None;\n                    self.workspace.app_details.clear();\n                    self.workspace.app_plan = None;\n                    self.workspace.app_ack = false;\n                    self.workspace.apps');p.write_text(s)
+          p=Path('src/ui_tests.rs');s=p.read_text();s+='''
+          #[test]
+          fn refreshed_inventory_clears_previous_selection_and_details() {
+              let ctx = egui::Context::default();
+              let mut app = Burrow::with_context(&ctx, false, false);
+              app.workspace.app_selected = Some(0);
+              app.workspace.app_details = "Previous app details".into();
+              app.workspace.app_ack = true;
+              app.tx.send(Event::Software(software::Inventory::default())).unwrap();
+              frame(&mut app, &ctx, [1060.0, 800.0], vec![]);
+              assert!(app.workspace.app_selected.is_none());
+              assert!(app.workspace.app_details.is_empty());
+              assert!(!app.workspace.app_ack);
+          }
+          ''';p.write_text(s)
+          subprocess.run(['cargo','fmt','--all'],check=True)
+          names=['src/software.rs','src/command.rs','src/workspaces.rs','src/ui.rs','src/ui_tests.rs'];entries=[]
+          for name in names:
+              blob=json.loads(subprocess.check_output(['gh','api','--method','POST','repos/NobleSpartan6/burrow/git/blobs','--input','-'],input=json.dumps({'content':Path(name).read_text(),'encoding':'utf-8'}).encode()))
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':blob['sha']})
+          Path('polished-entries.json').write_text(json.dumps(entries,indent=2))
+          print('POLISHED_ENTRIES='+json.dumps(entries),flush=True)
+          with zipfile.ZipFile('polished-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in names: archive.write(name,name)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polished-030-source
+          path: |
+            polished-source.zip
+            polished-entries.json
+          if-no-files-found: error
