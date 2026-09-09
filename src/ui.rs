@@ -15,7 +15,7 @@ use std::sync::{
     atomic::Ordering,
     mpsc::{self, Receiver, Sender},
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -70,12 +70,12 @@ pub struct Burrow {
     confirm: bool,
     closed_apps: bool,
     show_log: bool,
-    smoke: Option<(usize, Instant)>,
+    smoke: Option<crate::qa::NativeCheck>,
 }
 
 impl Burrow {
     pub fn new(cc: &eframe::CreationContext<'_>, smoke: bool) -> Self {
-        Self::with_context(&cc.egui_ctx, !smoke, smoke)
+        Self::with_context(&cc.egui_ctx, true, smoke)
     }
     fn with_context(ctx: &egui::Context, monitoring: bool, smoke: bool) -> Self {
         design::configure(ctx);
@@ -108,7 +108,7 @@ impl Burrow {
             confirm: false,
             closed_apps: false,
             show_log: false,
-            smoke: smoke.then(|| (0, Instant::now())),
+            smoke: smoke.then(crate::qa::NativeCheck::new),
         }
     }
     fn navigate(&mut self, page: Page, ctx: &egui::Context) {
@@ -475,6 +475,14 @@ impl Burrow {
                             let response = ui
                                 .checkbox(&mut checked, "")
                                 .on_hover_text("Select this file");
+                            response.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::WidgetType::Checkbox,
+                                    ui.is_enabled(),
+                                    checked,
+                                    &format!("Select {}", file.path.display()),
+                                )
+                            });
                             if response.changed() {
                                 if checked {
                                     self.selected.insert(i);
@@ -779,9 +787,10 @@ impl Burrow {
                             .inner_margin(5)
                             .show(ui, |ui| {
                                 ui.spacing_mut().item_spacing.x = 3.0;
+                                ui.spacing_mut().button_padding = egui::vec2(10.0, 8.0);
                                 ui.horizontal(|ui| {
                                     for (page, short) in [
-                                        (Page::Overview, "Overview"),
+                                        (Page::Overview, "Home"),
                                         (Page::Cleanup, "Clean"),
                                         (Page::Explorer, "Files"),
                                         (Page::About, "Help"),
@@ -803,6 +812,7 @@ impl Burrow {
                                             .corner_radius(11)
                                             .stroke(egui::Stroke::NONE),
                                         );
+                                        let response = response.on_hover_text(page.title());
                                         design::record(&response, page.title());
                                         if response.clicked() {
                                             self.navigate(page, ctx);
@@ -815,6 +825,15 @@ impl Burrow {
             });
     }
     fn draw(&mut self, ctx: &egui::Context) {
+        if let Some(mut smoke) = self.smoke.take() {
+            if let Some(page) = smoke.step(ctx) {
+                self.navigate(
+                    [Page::Overview, Page::Cleanup, Page::Explorer, Page::About][page],
+                    ctx,
+                );
+            }
+            self.smoke = Some(smoke);
+        }
         self.receive();
         if self.busy.is_some() {
             ctx.request_repaint_after(Duration::from_millis(150));
@@ -939,21 +958,6 @@ impl Burrow {
                     egui::ScrollArea::vertical().show_rows(ui,28.0,report.log.len(),|ui,range| { for i in range {ui.add(egui::Label::new(&report.log[i]).truncate()).on_hover_text(&report.log[i]);} });
                 }
             });
-        }
-        // Explicit read-only release smoke mode. Never starts a scan or cleanup.
-        if let Some((stage, last)) = self.smoke {
-            ctx.request_repaint_after(Duration::from_millis(80));
-            if last.elapsed() >= Duration::from_millis(350) {
-                let pages = [Page::Overview, Page::Cleanup, Page::Explorer, Page::About];
-                if stage < pages.len() {
-                    self.navigate(pages[stage], ctx);
-                    self.smoke = Some((stage + 1, Instant::now()));
-                } else {
-                    println!("BURROW_UI_SMOKE_OK {VERSION}");
-                    self.smoke = None;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }
         }
     }
 }

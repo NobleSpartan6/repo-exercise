@@ -1,0 +1,40 @@
+name: Report a Burrow problem
+description: Help us reproduce a failure and prevent it in the next release.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: 'This is a public issue. Redact personal file paths, screenshots, and logs. Never attach credentials or private data.'
+  - type: input
+    id: version
+    attributes:
+      label: Burrow version and installer
+      description: Find the version in About & help. Was this an installer or a portable ZIP?
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Operating system and hardware
+      description: OS version, Apple chip or Intel/AMD model, graphics adapter, display scaling, local or remote desktop.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps and observed behavior
+      description: What did you click? What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Error message, screenshot, or a short redacted log excerpt. State whether files were moved and whether recovery was attempted.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before posting
+      options:
+        - label: I removed personal file paths, private data, and account details.
+          required: true

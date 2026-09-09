@@ -9,7 +9,7 @@ repository = "https://github.com/NobleSpartan6/burrow"
 
 [features]
 default = ["desktop"]
-desktop = ["dep:ab_glyph", "dep:eframe", "dep:rfd", "dep:sysinfo", "dep:wgpu"]
+desktop = ["dep:ab_glyph", "dep:image", "dep:eframe", "dep:rfd", "dep:sysinfo", "dep:wgpu"]
 
 [[bin]]
 name = "burrow"
@@ -17,12 +17,13 @@ path = "src/main.rs"
 required-features = ["desktop"]
 
 [dependencies]
+image = { version = "=0.25.10", optional = true, default-features = false, features = ["png"] }
 ab_glyph = { version = "=0.2.32", optional = true }
 dirs = "=6.0.0"
 walkdir = "=2.5.0"
 rayon = "=1.11.0"
 trash = "=5.2.6"
-eframe = { version = "=0.33.0", optional = true, default-features = false, features = ["default_fonts", "accesskit", "__screenshot"] }
+eframe = { version = "=0.33.0", optional = true, default-features = false, features = ["default_fonts", "accesskit"] }
 rfd = { version = "=0.15.4", optional = true }
 sysinfo = { version = "=0.36.1", optional = true, default-features = false, features = ["system", "disk"] }
 

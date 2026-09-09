@@ -3,6 +3,7 @@
 
 mod design;
 mod monitor;
+mod qa;
 mod ui;
 
 fn main() -> std::process::ExitCode {
