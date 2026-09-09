@@ -20,6 +20,18 @@ jobs:
           persist-credentials: false
       - name: Install the pinned formatter
         run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Package the pinned Linux formatter for offline development
+        run: |
+          mkdir -p formatter/bin formatter/lib
+          toolchain=$(dirname "$(dirname "$(rustup which --toolchain 1.90.0 rustfmt)")")
+          cp "$toolchain/bin/rustfmt" formatter/bin/
+          find "$toolchain/lib" -maxdepth 1 -name '*.so' -exec cp '{}' formatter/lib/ \;
+          tar -czf rustfmt-linux.tar.gz -C formatter .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-linux-formatter
+          path: rustfmt-linux.tar.gz
+          retention-days: 1
       - name: Check formatting without changing the gate
         run: cargo fmt --all -- --check
       - name: Prepare a reviewable formatting patch
